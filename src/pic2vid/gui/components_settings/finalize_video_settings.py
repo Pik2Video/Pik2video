@@ -1,0 +1,1 @@
+# src/pic2vid/gui/components_settings/finalize_video_settings.py

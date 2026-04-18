@@ -1,0 +1,73 @@
+{
+    "_comment_app": "════════════ APPLICATION GENERAL SETTINGS ════════════",
+    "app_title": "Pic2Video",
+    
+    "_comment_main_window": "════════════ MAIN WINDOW ════════════",
+    "main_window_title": "Main Window",
+    "record_video": "Record Video",
+    "screen_capture": "Screen Capture",
+    "settings_tooltip": "Global application settings",
+    "notifications_tooltip": "Notifications",
+
+    "_comment_buttons": "════════════ BUTTONS ════════════",
+    "cancel_button": "Cancel",
+    "apply_button": "Apply",
+    
+    "_comment_settings": "════════════ APPLICATION SETTINGS ════════════",
+    "settings": "Settings",
+    "language_setting": "Application Language",
+    "text_size_setting": "Text Size",
+    "show_tooltips": "Show Tooltips",
+    "start_delay": "Start Delay (sec)",
+
+    "_comment_session_buttons": "════════════ SESSION BUTTONS ════════════",
+    "start_button": "Start",
+    "stop_button": "Stop",
+    
+    "_comment_record_settings": "════════════ VIDEO RECORD SETTINGS ════════════",
+    "record_settings_title": "Video Recording Settings",
+    "filename_setting": "File Name",
+    "fps_setting": "Frames Per Second (FPS)",
+    "quality_setting": "Video Quality",
+    "stop_after_setting": "Stop after",
+    
+    "_comment_screen_settings": "════════════ SCREEN CAPTURE SETTINGS ════════════",
+    "screen_settings_title": "Screen Capture Settings",
+    "capture_per_minute": "Captures Per Minute (1-100)",
+    
+    "_comment_finalize": "════════════ FINALIZE ════════════",
+    "video_finalize_title": "Finalize Video Recording",
+    "screen_finalize_title": "Finalize Screen Capture",
+    "video_format": "Video Format",
+    "playback_fps": "Playback FPS",
+    "export_path_setting": "Save Path",
+    "finalize_button": "Done",
+    "discard_button": "Discard",
+    "confirm_discard": "Delete recording without saving?",
+
+    "_comment_export_widget": "════════════ EXPORT WIDGET ════════════",
+    "save_to_label": "Save to:",
+    "browse_button": "Browse...",
+    "select_folder_dialog": "Select folder for saving",
+
+    "_comment_close_dialog": "════════════ CLOSE DIALOG ════════════",
+    "confirm_close_title": "Confirm Close",
+    "confirm_close_message": "There is an unfinished recording.\n\nDelete it without saving?",
+    "confirm_delete": "Yes, delete",
+    "confirm_cancel": "No, stay",
+
+    "_comment_dialogs_": "════════════ DIALOGS ════════════",
+    "confirm_title": "Confirmation",
+    "confirm_yes": "Yes",
+    "confirm_no": "No",
+    "confirm_discard_message": "Delete recording without saving?",
+    "info_title": "Information",
+    "info_ok": "OK",
+    "warning_title": "Warning",
+    "warning_ok": "OK",
+    "error_title": "Error",
+    "error_ok": "OK",
+    
+    "_comment_dialogs": "════════════ DIALOGS ════════════",
+    "confirm_interrupt": "Interrupt recording?\n\nThe current recording will be stopped.\nAll session data will be deleted."
+}

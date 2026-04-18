@@ -1,0 +1,73 @@
+{
+    "_comment_app": "════════════ ОБЩИЕ НАСТРОЙКИ ПРИЛОЖЕНИЯ ════════════",
+    "app_title": "Pic2Video",
+    
+    "_comment_main_window": "════════════ ГЛАВНОЕ ОКНО ════════════",
+    "main_window_title": "Главное окно",
+    "record_video": "Запись видео",
+    "screen_capture": "Запись экрана",
+    "settings_tooltip": "Глобальные настройки приложения",
+    "notifications_tooltip": "Уведомления",
+
+    "_comment_buttons": "════════════ КНОПКИ ОКНА НАСТРОЕК════════════",
+    "cancel_button": "Отмена",
+    "apply_button": "Применить",
+    
+    "_comment_settings": "════════════ НАСТРОЙКИ ПРИЛОЖЕНИЯ ════════════",
+    "settings": "Настройки",
+    "language_setting": "Язык приложения",
+    "text_size_setting": "Размер текста",
+    "show_tooltips": "Показывать подсказки",
+    "start_delay": "Пауза перед стартом (сек)",
+
+    "_comment_session_buttons": "════════════ КНОПКИ СЕССИЙ ════════════",
+    "start_button": "Старт",
+    "stop_button": "Стоп",
+    
+    "_comment_record_settings": "════════════ НАСТРОЙКИ ВИДЕОЗАПИСИ ════════════",
+    "record_settings_title": "Настройки записи видео",
+    "filename_setting": "Имя файла",
+    "fps_setting": "Кадров в секунду (FPS)",
+    "quality_setting": "Качество видео",
+    "stop_after_setting": "Остановить через",
+    
+    "_comment_screen_settings": "════════════ НАСТРОЙКИ ЗАХВАТА ЭКРАНА ════════════",
+    "screen_settings_title": "Настройки захвата экрана",
+    "capture_per_minute": "Снимков в минуту (от 1 до 100)",
+    
+    "_comment_finalize": "════════════ ФИНАЛИЗАЦИЯ ════════════",
+    "video_finalize_title": "Завершение записи видео",
+    "screen_finalize_title": "Завершение захвата экрана",
+    "video_format": "Формат видео",
+    "playback_fps": "FPS воспроизведения",
+    "export_path_setting": "Путь сохранения",
+    "finalize_button": "Готово",
+    "discard_button": "Удалить",
+    "confirm_discard": "Удалить запись без сохранения?",
+
+    "_comment_export_widget": "════════════ ВИДЖЕТ ЭКСПОРТА ════════════",
+    "save_to_label": "Сохранить в:",
+    "browse_button": "Обзор...",
+    "select_folder_dialog": "Выберите папку для сохранения",
+
+    "_comment_close_dialog": "════════════ ДИАЛОГ ЗАКРЫТИЯ ════════════",
+    "confirm_close_title": "Подтверждение закрытия",
+    "confirm_close_message": "Есть незавершенная запись.\n\nУдалить её без сохранения?",
+    "confirm_delete": "Да, удалить",
+    "confirm_cancel": "Нет, остаться",
+
+    "_comment_dialogs_": "════════════ ДИАЛОГИ ════════════",
+    "confirm_title": "Подтверждение",
+    "confirm_yes": "Да",
+    "confirm_no": "Нет",
+    "confirm_discard_message": "Удалить запись без сохранения?",
+    "info_title": "Информация",
+    "info_ok": "OK",
+    "warning_title": "Предупреждение",
+    "warning_ok": "OK",
+    "error_title": "Ошибка",
+    "error_ok": "OK",
+        
+    "_comment_dialogs": "════════════ ДИАЛОГИ ════════════",
+    "confirm_interrupt": "Прервать запись?\n\nТекущая запись будет остановлена.\nВсе данные этой сессии будут удалены."
+}

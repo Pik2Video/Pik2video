@@ -1,0 +1,36 @@
+[project]
+name = "pic2video"
+version = "0.1.0"
+description = "Простое  приложение для захвата экрана с двумя сценариями - запись видео и screen запись. запись видео это стандартная запись видео с рабочего стола. screen запись имеет в настройках собственный виджет, который позволяет регулировать количество кадров в минуту (от 1 ло 100). после записи в финальных настройках screen имеет окончательную часть этого виджета. после записи пользователь может указать, с какой частотой будет воспроизводиться видео, укозав число количества кадров в секунду. стандартная запись видео так же имеет финальное окно с окончательными настройками."
+dependencies = [
+    "requests>=2.32.5",
+    "pyautogui>=0.9.54",
+    "pyscreeze>=1.0.1",
+    "opencv-python>=4.12.0.88",
+    "numpy>=1.23.5",
+    "mss>=10.1.0",
+    "pyaudio>=0.2.14",
+    "pillow>=12.1.0",
+    "psutil>=7.2.1",
+    "pyside6>=6.10.2",
+]
+readme = "README.md"
+requires-python = ">=3.8"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.rye]
+managed = true
+dev-dependencies = [
+    # Зависимости для разработки
+    "watchdog>=6.0.0",
+    "pyinstaller>=6.19.0",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
