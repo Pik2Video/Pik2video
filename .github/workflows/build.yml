@@ -1,46 +1,38 @@
-# Имя нашего процесса (будет отображаться на вкладке Actions)
 name: Build Windows EXE
 
-# Говорим GitHub, когда запускать сборку
 on:
-  # Автоматически при создании нового "Релиза" (когда вы выкладываете версию для людей)
   release:
     types: [published]
-  # Вручную из вкладки Actions (для тестов, пока вы разрабатываете)
   workflow_dispatch:
 
-# Список задач (здесь только одна)
 jobs:
   build:
-    # Указываем GitHub использовать среду Windows. Она будет чистой и правильной!
     runs-on: windows-latest
 
-    # Шаги, которые нужно выполнить по порядку
     steps:
-      # 1. Забираем ваш код из репозитория
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Устанавливаем Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12' # Укажите вашу версию (3.8, 3.9, 3.10, 3.11, 3.12)
+          python-version: '3.12'
 
-      # 3. Устанавливаем все нужные библиотеки из вашего pyproject.toml
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e . # Эта "волшебная" команда установит все зависимости из pyproject.toml
+          pip install -e .
 
-      # 4. Запускаем PyInstaller для сборки .exe
+      - name: Install PyInstaller
+        run: |
+          pip install pyinstaller
+
       - name: Build with PyInstaller
         run: |
           pyinstaller --onedir --windowed --name="Pik2Video" --add-data "src/pic2vid/locale;pic2vid/locale" --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets src/main.py
 
-      # 5. Архивируем результат, чтобы было удобно скачать
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: Pik2Video-Windows
-          path: dist/Pik2Video/ # Папка с готовым приложением
+          path: dist/Pik2Video/
