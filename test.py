@@ -1,9 +1,9 @@
 # test.py — скрипт для DEV тестирования GUI
 import sys
 
-from src.pic2vid.app import Application
-from src.pic2vid.application.state_machine import AppState
-from src.pic2vid.application.session_types import SessionType
+from src.pik2video.app import Application
+from src.pik2video.application.state_machine import AppState
+from src.pik2video.application.session_types import SessionType
 
 # Словарь для выбора состояния и session_type
 # ключ — аргумент командной строки

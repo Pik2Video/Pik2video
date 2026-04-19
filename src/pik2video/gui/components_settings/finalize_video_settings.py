@@ -1,0 +1,1 @@
+# src/pik2video/gui/components_settings/finalize_video_settings.py

@@ -23,7 +23,7 @@ rye run pyinstaller \
     --name="Pik2Video" \
     --icon="resources/icons/app_icon.icns" \
     --add-data "resources/icons:resources/icons" \
-    --add-data "src/pic2vid/locale:pic2vid/locale" \
+    --add-data "src/pik2video/locale:pik2video/locale" \
     --hidden-import PySide6.QtCore \
     --hidden-import PySide6.QtGui \
     --hidden-import PySide6.QtWidgets \
@@ -36,11 +36,11 @@ if [ -d "dist/Pik2Video.app" ]; then
     mkdir -p "dist/Pik2Video.app/Contents/Resources/locale"
     
     # Копируем все файлы из locale
-    cp -r src/pic2vid/locale/* "dist/Pik2Video.app/Contents/Resources/locale/"
+    cp -r src/pik2video/locale/* "dist/Pik2Video.app/Contents/Resources/locale/"
     
     # Также копируем в папку MacOS (на всякий случай)
-    mkdir -p "dist/Pik2Video.app/Contents/MacOS/pic2vid/locale"
-    cp -r src/pic2vid/locale/* "dist/Pik2Video.app/Contents/MacOS/pic2vid/locale/"
+    mkdir -p "dist/Pik2Video.app/Contents/MacOS/pik2video/locale"
+    cp -r src/pik2video/locale/* "dist/Pik2Video.app/Contents/MacOS/pik2video/locale/"
     
     echo "✅ Файлы переводов скопированы"
 fi

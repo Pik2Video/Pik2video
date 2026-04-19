@@ -1,5 +1,5 @@
 # src/main.py
-from src.pic2vid.app import Application
+from src.pik2video.app import Application
 
 def main():
     app = Application()      # ─── Создаём QApplication ───

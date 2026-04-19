@@ -29,7 +29,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller --onedir --windowed --name="Pik2Video" --add-data "src/pic2vid/locale;pic2vid/locale" --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets src/main.py
+          pyinstaller --onedir --windowed --name="Pik2Video" --add-data "src/pik2video/locale;pik2video/locale" --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets src/main.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
