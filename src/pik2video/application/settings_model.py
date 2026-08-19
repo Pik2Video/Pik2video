@@ -1,8 +1,12 @@
 # application/settings_model.py
 
+import logging
+
 import json
 from pathlib import Path
 from dataclasses import asdict, dataclass, field
+
+logger = logging.getLogger(__name__)
 
 # 1️⃣ ────────────Глобальные настройки приложения────────────
 @dataclass
@@ -10,13 +14,17 @@ class AppGlobalSettings:
     language: str = "Русский"
     text_size: int = 12
     show_tooltips: bool = True
+    # start_delay: int = 0 
+    always_on_top: bool = False
+    preset_vertical: bool = False  # 🆕 false = горизонтально, true = вертикально
 
 
 # 2️⃣ ────────────Общие настройки для всех сессий (Record + Screen)────────────
 @dataclass
 class CommonSessionSettings:
-    timer_seconds: int = 0   # 0 = без ограничения
-    quality: str = "Среднее" # применимо к обоим типам
+    timer_seconds: int = 0    # 0 = без ограничения
+    quality: str = "Среднее"  # применимо к обоим типам
+    start_delay: int = 0      # пауза перед стартом
     # сюда потом можно добавить ещё общие настройки
 
 
@@ -29,7 +37,7 @@ class RecordSettings:
 # 4️⃣ ────────────Настройки скриншотов────────────
 @dataclass
 class ScreenSettings:
-    capture_per_minute: int = 10
+    capture_fps: int = 1
     common: CommonSessionSettings = field(default_factory=CommonSessionSettings)
 
 
@@ -38,13 +46,18 @@ class ScreenSettings:
 @dataclass
 class FinalizeScreenSettings:
     playback_fps: int = 10
+    speed_multiplier: float = 1.0  # 🆕
 
 # ────────────Общие финальные настройки для всех сессий────────────
 @dataclass
 class FinalizeCommonSettings:
     export_filename: str = "output"  # имя файла без расширения
-    video_format: str = "MP4"  # общая настройка формата видео для обоих сценариев
-    export_path: str = ""  # пустая строка — будем использовать дефолт
+    video_format: str = "MP4"        # общая настройка формата видео для обоих сценариев
+    export_path: str = ""            # пустая строка — будем использовать дефолт
+    resolution: str = "original"     # 🆕 original, 1080p, 720p, 480p
+    bitrate_mode: str = "auto"       # 🆕 auto, manual
+    bitrate_value: str = "4M"        # 🆕 для manual
+    rotation: int = 0                # 🆕 0, 90, 180, 270
 
 
 
@@ -84,7 +97,7 @@ class SettingsModel:
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         
-        print(f"[Settings] Сохранено в {filepath}")
+        logger.debug(f"Настройки сохранены в {filepath}")
     
     def load_from_file(self, filepath: Path = None):
         """Загружает настройки из JSON файла"""
@@ -92,7 +105,7 @@ class SettingsModel:
             filepath = Path.home() / ".pik2video" / "settings.json"
         
         if not filepath.exists():
-            print(f"[Settings] Файл не найден, используем настройки по умолчанию")
+            logger.info("Файл настроек не найден, используем значения по умолчанию")
             return False
         
         try:
@@ -105,6 +118,8 @@ class SettingsModel:
                 self.global_settings.language = gs.get("language", "Русский")
                 self.global_settings.text_size = gs.get("text_size", 12)
                 self.global_settings.show_tooltips = gs.get("show_tooltips", True)
+                self.global_settings.always_on_top = gs.get("always_on_top", False)
+                self.global_settings.preset_vertical = gs.get("preset_vertical", False)  # 🆕
             
             # Загружаем настройки записи
             if "record" in data:
@@ -113,14 +128,16 @@ class SettingsModel:
                 if "common" in r:
                     self.record.common.timer_seconds = r["common"].get("timer_seconds", 0)
                     self.record.common.quality = r["common"].get("quality", "Среднее")
+                    self.record.common.start_delay = r["common"].get("start_delay", 0)  # пауза перед стартом
             
             # Загружаем настройки экрана
             if "screen" in data:
                 s = data["screen"]
-                self.screen.capture_per_minute = s.get("capture_per_minute", 10)
+                self.screen.capture_fps = s.get("capture_fps", 1)
                 if "common" in s:
                     self.screen.common.timer_seconds = s["common"].get("timer_seconds", 0)
                     self.screen.common.quality = s["common"].get("quality", "Среднее")
+                    self.screen.common.start_delay = s["common"].get("start_delay", 0)  # пауза перед стартом
             
             # Загружаем финальные настройки
             if "finalize" in data:
@@ -131,10 +148,14 @@ class SettingsModel:
                     self.finalize.common.export_filename = f["common"].get("export_filename", "output")
                     self.finalize.common.video_format = f["common"].get("video_format", "MP4")
                     self.finalize.common.export_path = f["common"].get("export_path", "")
+                    self.finalize.common.resolution = f["common"].get("resolution", "original")        # 🆕
+                    self.finalize.common.bitrate_mode = f["common"].get("bitrate_mode", "auto")        # 🆕
+                    self.finalize.common.bitrate_value = f["common"].get("bitrate_value", "4M")        # 🆕
+                    self.finalize.common.rotation = f["common"].get("rotation", 0)                     # 🆕
             
-            print(f"[Settings] Загружено из {filepath}")
+            logger.debug(f"Настройки загружены из {filepath}")
             return True
             
         except Exception as e:
-            print(f"[Settings] Ошибка загрузки: {e}")
+            logger.error(f"Ошибка загрузки настроек: {e}")
             return False

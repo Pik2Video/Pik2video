@@ -2,13 +2,23 @@
 
 import time
 import threading
-from pathlib import Path
-from typing import Optional
-import cv2
+import subprocess
 
-from src.pik2video.core.video_recorder import VideoRecorder
+from pathlib import Path
+
+import logging
+logger = logging.getLogger(__name__)
+
+from typing import Optional
+
+# import cv2
+# from src.pik2video.core.video_recorder import VideoRecorder
+
 from src.pik2video.core.frame_capturer import FrameCapturer
 from src.pik2video.core.video_assembler import VideoAssembler
+
+from src.pik2video.core.ffmpeg_video_recorder import FFmpegVideoRecorder
+
 from .settings_model import SettingsModel
 from .session_types import SessionType
 
@@ -28,7 +38,6 @@ class RecordingService:
         self._recorder: Optional[VideoRecorder] = None
         self._capturer: Optional[FrameCapturer] = None
         self._record_thread: Optional[threading.Thread] = None
-        #self._timer_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._start_time: Optional[float] = None
         self._is_recording: bool = False
@@ -55,16 +64,6 @@ class RecordingService:
 
         return True
 
-    def _quality_to_format(self, quality: str) -> tuple:
-        """
-        Преобразует качество в (fourcc, extension) для VIDEO режима
-        """
-        if quality == "Низкое":
-            return cv2.VideoWriter_fourcc(*"XVID"), ".avi"
-        elif quality == "Высокое":
-            return cv2.VideoWriter_fourcc(*"MJPG"), ".avi"
-        else:  # "Среднее"
-            return cv2.VideoWriter_fourcc(*"mp4v"), ".mp4"
 
     def _format_to_fourcc(self, video_format: str) -> int:
         """
@@ -83,15 +82,15 @@ class RecordingService:
         """Запуск непрерывной записи видео с учётом качества"""
         
         quality = self._settings.record.common.quality
-        fourcc, extension = self._quality_to_format(quality)
         
-        video_path = self._session_dir / f"output{extension}"
+        # Всегда сохраняем в MKV (устойчив к обрыву)
+        video_path = self._session_dir / "raw_output.mp4"
         
-        self._recorder = VideoRecorder(
+        self._recorder = FFmpegVideoRecorder(
             output_path=video_path,
             fps=self._settings.record.fps,
             region=region,
-            fourcc=fourcc,
+            quality=quality,
         )
         self._record_thread = threading.Thread(target=self._recorder.start, daemon=True)
         self._record_thread.start()
@@ -106,7 +105,7 @@ class RecordingService:
         
         self._capturer = FrameCapturer(
             output_dir=frames_dir,
-            shots_per_minute=self._settings.screen.capture_per_minute,
+            capture_fps=self._settings.screen.capture_fps,
             region=region,
         )
         self._record_thread = threading.Thread(target=self._capturer.start, daemon=True)
@@ -135,34 +134,30 @@ class RecordingService:
         return True
 
     def _assemble_video_from_frames(self):
-        """Собирает видео из кадров после остановки screen capture"""
+        """Собирает видео из кадров через FFmpeg после остановки screen capture"""
         if not self._session_dir:
             return
         
         frames_dir = self._session_dir / "frames"
-        #output_path = self._session_dir / "output.mp4"
-
-        # Получаем формат из финальных настроек
         video_format = self._settings.finalize.common.video_format
-        fourcc = self._format_to_fourcc(video_format)
-        
-        # Определяем расширение
         extension = f".{video_format.lower()}"
         output_path = self._session_dir / f"output{extension}"
         
         if frames_dir.exists() and any(frames_dir.glob("*.png")):
-            # Получаем формат из настроек (по умолчанию MP4)
-            #video_format = self._settings.finalize.common.video_format
-            # Для первой версии игнорируем формат — всегда MP4
-            # TODO: поддержка других форматов в следующей версии
+            from src.pik2video.infrastructure.ffmpeg.ffmpeg_service import FFmpegService
             
-            VideoAssembler.assemble(
+            ffmpeg = FFmpegService()
+            cmd = ffmpeg.build_assembly_command(
                 frames_dir=frames_dir,
                 output_path=output_path,
                 fps=self._settings.finalize.screen.playback_fps,
-                fourcc=fourcc,
+                video_format=video_format,
             )
+            
+            logger.debug(f"Сборка видео: {' '.join(cmd)}")
+            subprocess.run(cmd, capture_output=True)
 
+    
     def get_elapsed_time(self) -> float:
         """Вернуть прошедшее время записи в секундах"""
         if not self._start_time:

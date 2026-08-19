@@ -1,4 +1,4 @@
-# elements/sphere.py
+# resources/scripts/elements/sphere.py
 
 from PIL import ImageDraw
 

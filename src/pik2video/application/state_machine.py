@@ -7,6 +7,7 @@ class AppState(Enum):
     IDLE = auto()
     PREPARING_VIDEO = auto()
     PREPARING_SCREEN = auto()
+    WAITING = auto()      # 🆕 отсчёт перед стартом
     RECORDING = auto()
     REVIEW = auto()
 
@@ -73,6 +74,13 @@ class StateMachine:
         ):
             return False
 
+        self._set_state(AppState.WAITING)
+        return True
+
+    def begin_recording(self) -> bool:
+        """Переход из WAITING в RECORDING (после задержки)"""
+        if self._state != AppState.WAITING:
+            return False
         self._set_state(AppState.RECORDING)
         return True
 
@@ -81,7 +89,7 @@ class StateMachine:
     # ---------------------------------------
 
     def can_stop_recording(self) -> bool:
-        return self._state == AppState.RECORDING
+        return self._state in (AppState.RECORDING, AppState.WAITING)
 
     def stop_recording(self) -> bool:
         if not self.can_stop_recording():
@@ -122,6 +130,7 @@ class StateMachine:
         return self._state in (
             AppState.PREPARING_VIDEO,
             AppState.PREPARING_SCREEN,
+            AppState.WAITING,
         )
 
     def cancel_preparing(self) -> bool:

@@ -1,4 +1,4 @@
-# elements/utils.py
+# resources/scripts/elements/utils.py
 
 from PIL import ImageDraw, ImageFont
 import os

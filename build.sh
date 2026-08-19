@@ -7,6 +7,10 @@ echo "!!! 🔨 🔩 ⚙️ ⛓️ Запущен процесс сборки п�
 echo "🎨 Генерирую PNG иконки..."
 python scripts/generate_icon.py
 
+# Генерация фона
+echo "🎨 Генерирую фон..."
+python resources/scripts/generate_background.py
+
 # 2. Конвертация PNG → ICNS
 echo "🖼️  Конвертирую PNG в ICNS..."
 png2icns resources/icons/app_icon.icns resources/icons/icon_512.png
@@ -23,6 +27,7 @@ rye run pyinstaller \
     --name="Pik2Video" \
     --icon="resources/icons/app_icon.icns" \
     --add-data "resources/icons:resources/icons" \
+    --add-data "resources/backgrounds:resources/backgrounds" \
     --add-data "src/pik2video/locale:pik2video/locale" \
     --hidden-import PySide6.QtCore \
     --hidden-import PySide6.QtGui \
@@ -51,6 +56,6 @@ if [ -d "dist/Pik2Video.app" ]; then
     echo "📱 Приложение: dist/Pik2Video.app"
     open dist/
 else
-    echo "❌ Ошибка сборки! ⛓️‍💥 ⛓️‍💥 ⛓️‍💥"
+    echo "        ⛓️‍💥 ⛓️‍💥 ⛓️‍💥⛓️‍💥 ⛓️‍💥 ⛓️‍💥           ❌ Ошибка сборки!❌           ⛓️‍💥 ⛓️‍💥 ⛓️‍💥⛓️‍💥 ⛓️‍💥 ⛓️‍💥"
     exit 1
 fi

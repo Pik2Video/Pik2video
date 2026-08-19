@@ -1,28 +1,32 @@
 # src/pik2video/utils.py
-import os
-import uuid
-import time                                               
+
+"""
+Общие утилиты приложения, не зависящие от конкретных модулей.
+Используются в: controller.py, gui/sessions.py и др.
+"""
+
 
 def format_size(size_bytes: int) -> str:
-    """Форматирует размер в байтах в человекочитаемый вид"""
+    """Преобразует размер из байтов в человекочитаемый вид."""
     if size_bytes < 1024:
         return f"{size_bytes} B"
-    elif size_bytes < 1024 * 1024:
-        return f"{size_bytes / 1024:.1f} KB"
-    else:
-        return f"{size_bytes / (1024 * 1024):.1f} MB"
+    
+    size_kb = size_bytes / 1024
+    if size_kb < 1024:
+        return f"{size_kb:.1f} KB"
+    
+    size_mb = size_kb / 1024
+    if size_mb < 1024:
+        return f"{size_mb:.2f} MB"
+    
+    size_gb = size_mb / 1024
+    return f"{size_gb:.2f} GB"
 
-def format_timer(seconds):                                # Форматирование секунд в удобный временной формат hh:mm:ss
+
+def format_time(seconds: float, prefix: str = "TIME:") -> str:
+    """Преобразует секунды в формат ЧЧ:ММ:СС с префиксом."""
     seconds = int(seconds)
-    hours = seconds // 3600                               # Целочисленное деление на часы
-    minutes = (seconds % 3600) // 60                      # Минуты из остатка часов
-    secs = seconds % 60                                   # Остаточные секунды
-    return f'{hours:02}:{minutes:02}:{secs:02}'           # Форматируем строку с ведущими нулями
-
-def ensure_directory_exists(directory):
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-def generate_unique_filename(prefix="capture"):
-    unique_id = uuid.uuid4().hex[:8]
-    return f"{prefix}_{unique_id}"
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    return f"{prefix} {hours:02}:{minutes:02}:{secs:02}"

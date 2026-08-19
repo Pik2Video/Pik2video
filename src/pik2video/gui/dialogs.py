@@ -13,7 +13,7 @@ def confirm(parent, text: str, title: str = "Подтверждение", transl
     # Если есть translator, переводим кнопки
     if translator:
         msg.setWindowTitle(translator.tr("confirm_title"))
-        msg.setText(text)  # текст уже должен быть переведен до вызова
+        msg.setText(text)                    # текст уже должен быть переведен до вызова
         msg.setIcon(QMessageBox.Question)
         
         btn_yes = msg.addButton(translator.tr("confirm_yes"), QMessageBox.YesRole)

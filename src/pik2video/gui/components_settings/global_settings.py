@@ -57,22 +57,15 @@ class TooltipsSetting(QCheckBox):
         # Возвращает True/False
         return self.isChecked()
 
-
-# ────────────4️⃣ Пауза перед стартом─────────
-class StartDelaySetting(QSpinBox):
+# ────────────4️⃣ Всегда в топе────────────
+class AlwaysOnTopSetting(QCheckBox):
     """
-    Виджет для паузы перед стартом в секундах
+    Виджет для включения/выключения режима "всегда в топе"
     """
     def __init__(self, controller):
         super().__init__()
-        # Ограничиваем диапазон 0–30 секунд
-        self.setRange(0, 30)
-        # Значение из контроллера (если есть)
-        value = controller.get_start_delay() if hasattr(controller, "get_start_delay") else 5
-        self.setValue(value)
-        # Фиксированная ширина, чтобы строка была ровной
-        self.setFixedWidth(40)
+        self.setChecked(controller.get_always_on_top())
+        self.setText("")
 
     def get_value(self):
-        # Возвращает выбранное значение паузы
-        return self.value()
+        return self.isChecked()

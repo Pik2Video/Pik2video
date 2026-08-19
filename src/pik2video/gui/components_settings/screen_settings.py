@@ -27,7 +27,7 @@ class CapturePerMinuteInput(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.spinbox = CleanSpinBox()
-        self.spinbox.setRange(1, 100)
+        self.spinbox.setRange(1, 1000)
         self.spinbox.setValue(initial)
         self.spinbox.setMinimumWidth(60)
         self.spinbox.setAlignment(Qt.AlignCenter)

@@ -1,4 +1,4 @@
-# scripts/generate_icon.py
+# resources/scripts/generate_icon.py
 
 from PIL import Image, ImageDraw
 import os

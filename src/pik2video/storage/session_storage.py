@@ -1,10 +1,13 @@
 # src/pik2video/storage/session_storage.py
 
+import logging
+
 import time
 import shutil
 from pathlib import Path
 from typing import Optional
 
+logger = logging.getLogger(__name__)
 
 class SessionStorage:
     """
@@ -73,14 +76,23 @@ class SessionStorage:
     # ============ ДОСТУП К ФАЙЛАМ ==============
 
     def get_video_path(self) -> Optional[Path]:
-        """ Возвращает путь к видео, если оно существует """
+        """
+        Возвращает путь к видеофайлу в сессии.
+        Ищет raw_output.mp4 (новый формат) и output.mp4 (старый).
+        """
         if not self.has_active_session():
             return None
 
-        video_path = self.session_dir / "output.mp4"
-        if video_path.exists():
-            return video_path
-
+        # Ищем любой видеофайл в папке сессии
+        video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.gif']
+        
+        for item in self.session_dir.iterdir():
+            if item.is_file() and item.suffix in video_extensions:
+                if item.stat().st_size > 0:  # файл не пустой
+                    logger.debug(f"Найден видеофайл: {item}")
+                    return item
+        
+        logger.warning(f"Видеофайл не найден в {self.session_dir}")
         return None
 
     def get_frame_count(self) -> int:
@@ -141,8 +153,8 @@ class SessionStorage:
         try:
             # Удаляем всю папку рекурсивно (включая все подпапки и файлы)
             shutil.rmtree(self.session_dir)
-            print(f"[SessionStorage] Удалена папка: {self.session_dir}")
+            logger.debug(f"Удалена папка: {self.session_dir}")
         except Exception as e:
-            print(f"[SessionStorage] Ошибка при удалении {self.session_dir}: {e}")
+            logger.error(f"Ошибка при удалении {self.session_dir}: {e}")
         
         self.session_dir = None

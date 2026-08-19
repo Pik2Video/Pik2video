@@ -19,7 +19,7 @@ class VideoFormatInput(QWidget):
         super().__init__()
 
         self.current_format = initial
-        self.allowed_formats = ["MP4", "MKV", "AVI", "MOV"]
+        self.allowed_formats = ["MP4", "MKV", "AVI", "MOV", "GIF"]
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -171,3 +171,138 @@ class ExportPathInput(QWidget):
             self._current_path = path
             self.path_label.setText(path)
             self.valueChanged.emit(path)
+
+
+
+
+class ResolutionSelector(QWidget):
+    """Выбор разрешения: Оригинал / 1080p / 720p / 480p"""
+    
+    valueChanged = Signal(str)
+    
+    RESOLUTIONS = {
+        "original": "Оригинал",
+        "1080p": "1080p",
+        "720p": "720p",
+        "480p": "480p",
+    }
+    
+    def __init__(self, initial: str = "original"):
+        super().__init__()
+        self.current = initial
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.btn = QPushButton(self.RESOLUTIONS.get(initial, "Оригинал"))
+        self.btn.setFocusPolicy(Qt.NoFocus)
+        
+        self.menu = QMenu(self)
+        for key, label in self.RESOLUTIONS.items():
+            action = QAction(label, self)
+            action.triggered.connect(lambda checked, k=key: self.set(k))
+            self.menu.addAction(action)
+        self.btn.setMenu(self.menu)
+        
+        layout.addWidget(self.btn)
+    
+    def get(self) -> str:
+        return self.current
+    
+    def set(self, value: str):
+        if value in self.RESOLUTIONS:
+            self.current = value
+            self.btn.setText(self.RESOLUTIONS[value])
+            self.valueChanged.emit(value)
+
+
+class BitrateSelector(QWidget):
+    """Битрейт: авто или вручную"""
+    
+    valueChanged = Signal(str, str)  # mode, value
+    
+    def __init__(self, mode: str = "auto", value: str = "4M"):
+        super().__init__()
+        self._mode = mode
+        self._value = value
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        
+        # Кнопка авто/вручную
+        self.btn_mode = QPushButton("Авто" if mode == "auto" else "Вручную")
+        self.btn_mode.setFixedWidth(80)
+        self.btn_mode.setFocusPolicy(Qt.NoFocus)
+        
+        self.menu = QMenu(self)
+        for m in ["auto", "manual"]:
+            label = "Авто" if m == "auto" else "Вручную"
+            action = QAction(label, self)
+            action.triggered.connect(lambda checked, mode=m: self._set_mode(mode))
+            self.menu.addAction(action)
+        self.btn_mode.setMenu(self.menu)
+        
+        # Поле ввода значения (только для ручного режима)
+        self.value_input = QLineEdit()
+        self.value_input.setText(value)
+        self.value_input.setFixedWidth(60)
+        self.value_input.setAlignment(Qt.AlignCenter)
+        self.value_input.setVisible(mode == "manual")
+        self.value_input.textChanged.connect(self._on_value_changed)
+        
+        layout.addWidget(self.btn_mode)
+        layout.addWidget(self.value_input)
+        layout.addStretch()
+    
+    def _set_mode(self, mode: str):
+        self._mode = mode
+        self.btn_mode.setText("Авто" if mode == "auto" else "Вручную")
+        self.value_input.setVisible(mode == "manual")
+        self.valueChanged.emit(self._mode, self._value)
+    
+    def _on_value_changed(self, text: str):
+        self._value = text
+        self.valueChanged.emit(self._mode, self._value)
+    
+    def get_mode(self) -> str:
+        return self._mode
+    
+    def get_value(self) -> str:
+        return self._value
+
+
+class RotationSelector(QWidget):
+    """Поворот: 0° / 90° / 180° / 270°"""
+    
+    valueChanged = Signal(int)
+    
+    ANGLES = {0: "0°", 90: "90°", 180: "180°", 270: "270°"}
+    
+    def __init__(self, initial: int = 0):
+        super().__init__()
+        self.current = initial
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.btn = QPushButton(self.ANGLES.get(initial, "0°"))
+        self.btn.setFocusPolicy(Qt.NoFocus)
+        
+        self.menu = QMenu(self)
+        for angle, label in self.ANGLES.items():
+            action = QAction(label, self)
+            action.triggered.connect(lambda checked, a=angle: self.set(a))
+            self.menu.addAction(action)
+        self.btn.setMenu(self.menu)
+        
+        layout.addWidget(self.btn)
+    
+    def get(self) -> int:
+        return self.current
+    
+    def set(self, angle: int):
+        if angle in self.ANGLES:
+            self.current = angle
+            self.btn.setText(self.ANGLES[angle])
+            self.valueChanged.emit(angle)

@@ -1,0 +1,226 @@
+
+# src/main.py
+from src.pik2video.app import Application
+
+# src/pik2video/app.py
+import sys
+from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import Qt, QTimer
+from src.pik2video.infrastructure.logging import setup_logging
+import logging
+from src.pik2video.utils import format_size, format_time
+from src.pik2video.application.controller import AppController
+from src.pik2video.application.session_types import SessionType
+from src.pik2video.application.state_machine import AppState
+from src.pik2video.gui.windows import MainWindow, AppSettingsDialog
+from src.pik2video.gui.sessions import VideoCaptureSession, ScreenCaptureSession, VideoFinalizeWidget, ScreenFinalizeWidget
+from src.pik2video.gui.overlays import CoordinateOverlay
+from src.pik2video.gui.preset_window import PresetWindow
+from src.pik2video.gui.ffmpeg_dialog import FFmpegMissingDialog
+from src.pik2video.gui.utils import bottom_right_position, center_to_parent, bring_window_to_front, keep_window_inside_screen
+
+# src/pik2video/application/controller.py
+import logging
+import time
+from pathlib import Path
+from typing import Optional
+from PySide6.QtCore import QObject, Signal, QTimer
+from src.pik2video.infrastructure.ffmpeg.ffmpeg_service import FFmpegService
+from .session_types import SessionType
+from .recording_service import RecordingService
+from .session_service import SessionService
+from .settings_model import SettingsModel
+from .state_machine import StateMachine, AppState
+from src.pik2video.utils import format_size, format_time
+from src.pik2video.locale.translator import Translator
+
+# src/pik2video/application/recording_service.py
+import time
+import threading
+import subprocess
+from pathlib import Path
+import logging
+from typing import Optional
+from src.pik2video.core.frame_capturer import FrameCapturer
+from src.pik2video.core.video_assembler import VideoAssembler
+from src.pik2video.core.ffmpeg_video_recorder import FFmpegVideoRecorder
+from .settings_model import SettingsModel
+from .session_types import SessionType
+
+# src/pik2video/application/session_service.py
+from pathlib import Path
+from typing import Optional
+from src.pik2video.storage.session_storage import SessionStorage
+
+# src/pik2video/application/session_types.py
+from enum import Enum
+
+# src/pik2video/application/settings_model.py
+import logging
+import json
+from pathlib import Path
+from dataclasses import asdict, dataclass, field
+
+# src/pik2video/application/state_machine.py
+from enum import Enum, auto
+
+# src/pik2video/core/ffmpeg_video_recorder.py
+import logging
+import subprocess
+import time
+import threading
+from pathlib import Path
+from typing import Optional
+import mss
+import numpy as np
+from src.pik2video.infrastructure.ffmpeg.ffmpeg_service import FFmpegService
+
+# src/pik2video/core/frame_capturer.py
+import time
+import threading
+from pathlib import Path
+from typing import Optional
+import mss
+import numpy as np
+from PIL import Image
+
+# src/pik2video/core/video_assembler.py
+from pathlib import Path
+from typing import List
+import cv2
+import numpy as np
+
+# src/pik2video/core/video_recorder.py
+import threading
+import time
+from pathlib import Path
+import mss
+import cv2
+import numpy as np
+from typing import Optional
+
+# src/pik2video/gui/base.py
+import logging
+from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QSizePolicy, QLabel
+from PySide6.QtCore import Qt, QSize, QEvent, Signal, QObject
+from PySide6.QtGui import QCloseEvent
+from src.pik2video.gui.dialogs import confirm
+from .utils import center_to_parent, keep_window_inside_screen
+
+# src/pik2video/gui/close_policy.py
+from enum import Enum
+
+# src/pik2video/gui/components_settings/common_settings.py
+from PySide6.QtWidgets import QWidget, QLabel, QPushButton, QHBoxLayout, QSpinBox, QSizePolicy, QLineEdit, QApplication
+from PySide6.QtCore import Qt, QEvent, Signal, QTimer
+from PySide6.QtGui import QFont, QIntValidator
+
+# src/pik2video/gui/components_settings/finalize_common_settings.py
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QLineEdit, QLabel, QPushButton, QMenu, QFileDialog
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction
+from pathlib import Path
+
+# src/pik2video/gui/components_settings/finalize_screen_settings.py
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QSpinBox, QPushButton, QLabel
+from PySide6.QtCore import Qt, Signal
+from .screen_settings import CleanSpinBox
+
+# src/pik2video/gui/components_settings/global_settings.py
+from PySide6.QtWidgets import QComboBox, QSpinBox, QCheckBox
+from PySide6.QtCore import Qt
+
+# src/pik2video/gui/components_settings/record_settings.py
+from PySide6.QtWidgets import QWidget, QLabel, QPushButton, QHBoxLayout
+from PySide6.QtCore import Qt
+
+# src/pik2video/gui/components_settings/screen_settings.py
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QSpinBox
+from PySide6.QtCore import Qt, Signal
+
+# src/pik2video/gui/components_settings/setting_row.py
+from PySide6.QtWidgets import QWidget, QLabel, QHBoxLayout, QSpacerItem, QSizePolicy
+
+# src/pik2video/gui/dialogs.py
+from PySide6.QtWidgets import QMessageBox
+
+# src/pik2video/gui/ffmpeg_dialog.py
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton
+from PySide6.QtCore import Qt
+
+# src/pik2video/gui/overlays.py
+import logging
+from PySide6.QtWidgets import QWidget, QRubberBand
+from PySide6.QtCore import Qt, QRect, QTimer, Signal
+from PySide6.QtGui import QPainter, QColor, QPen, QFont
+
+# src/pik2video/gui/panels.py
+from PySide6.QtWidgets import (
+from PySide6.QtCore import Qt
+
+# src/pik2video/gui/preset_window.py
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
+from PySide6.QtCore import Qt, Signal, QTimer, QSize
+from PySide6.QtGui import QGuiApplication
+
+# src/pik2video/gui/sessions.py
+from PySide6.QtWidgets import QWidget, QLabel, QApplication, QHBoxLayout, QVBoxLayout, QSpinBox
+from PySide6.QtCore import Qt, QTimer, QEvent, Signal
+from PySide6.QtGui import QResizeEvent, QCloseEvent
+from .components_settings.screen_settings import CapturePerMinuteInput, CleanSpinBox
+from .components_settings.setting_row import SettingRow
+from .components_settings.record_settings import FpsSwitcher
+from .components_settings.common_settings import TimerInput, QualitySwitcher, ExportFilenameInput
+from .components_settings.finalize_common_settings import  ExportPathInput, VideoFormatInput, ResolutionSelector, BitrateSelector, RotationSelector  # 🆕
+from .components_settings.finalize_screen_settings import PlaybackFpsInput, SpeedPresetSelector
+from src.pik2video.gui.dialogs import confirm
+from .utils import center_to_parent, fullscreen_geometry, bring_window_to_front, keep_window_inside_screen
+from .base import SettingsDialog, FinalizeWidget
+from .overlays import CoordinateOverlay
+from .panels import CapturePanel
+
+# src/pik2video/gui/utils.py
+from PySide6.QtCore import Qt, QPoint, QRect
+from PySide6.QtWidgets import QApplication, QWidget
+
+# src/pik2video/gui/windows.py
+import logging
+from PySide6.QtWidgets import (
+from PySide6.QtCore import Qt, Signal, QEvent
+from .components_settings.setting_row import SettingRow
+from .components_settings.global_settings import (
+from .utils import center_to_parent, keep_window_inside_screen
+from .base import SettingsDialog
+from .sessions import VideoCaptureSession, ScreenCaptureSession
+from .sessions import VideoFinalizeWidget, ScreenFinalizeWidget
+
+# src/pik2video/infrastructure/ffmpeg/ffmpeg_service.py
+import logging
+import shutil
+import subprocess
+import platform
+import os
+from pathlib import Path
+from typing import Optional
+
+# src/pik2video/infrastructure/logging/__init__.py
+from .logger_setup import setup_logging
+
+# src/pik2video/infrastructure/logging/logger_setup.py
+import logging
+import sys
+from pathlib import Path
+from datetime import datetime
+
+# src/pik2video/locale/translator.py
+import logging
+from PySide6.QtCore import QObject, Signal
+import json
+from pathlib import Path
+
+# src/pik2video/storage/session_storage.py
+import logging
+import time
+import shutil
+from pathlib import Path
+from typing import Optional

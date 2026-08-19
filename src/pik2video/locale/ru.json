@@ -4,21 +4,22 @@
     
     "_comment_main_window": "════════════ ГЛАВНОЕ ОКНО ════════════",
     "main_window_title": "Главное окно",
-    "record_video": "Запись видео",
-    "screen_capture": "Запись экрана",
+    "record_video": "запись видео",
+    "screen_capture": "screen запись",
     "settings_tooltip": "Глобальные настройки приложения",
-    "notifications_tooltip": "Уведомления",
+    "notifications_tooltip": "О приложении",
 
     "_comment_buttons": "════════════ КНОПКИ ОКНА НАСТРОЕК════════════",
-    "cancel_button": "Отмена",
-    "apply_button": "Применить",
+    "cancel_button": "❌     Отмена",
+    "apply_button": "Применить      ✅",
     
     "_comment_settings": "════════════ НАСТРОЙКИ ПРИЛОЖЕНИЯ ════════════",
-    "settings": "Настройки",
+    "settings": "глобальные настройки приложения",
     "language_setting": "Язык приложения",
     "text_size_setting": "Размер текста",
     "show_tooltips": "Показывать подсказки",
-    "start_delay": "Пауза перед стартом (сек)",
+    "always_on_top": "Всегда поверх других окон",
+
 
     "_comment_session_buttons": "════════════ КНОПКИ СЕССИЙ ════════════",
     "start_button": "Старт",
@@ -30,6 +31,7 @@
     "fps_setting": "Кадров в секунду (FPS)",
     "quality_setting": "Качество видео",
     "stop_after_setting": "Остановить через",
+    "start_delay_setting": "Пауза перед стартом (сек)",
     
     "_comment_screen_settings": "════════════ НАСТРОЙКИ ЗАХВАТА ЭКРАНА ════════════",
     "screen_settings_title": "Настройки захвата экрана",
@@ -39,7 +41,8 @@
     "video_finalize_title": "Завершение записи видео",
     "screen_finalize_title": "Завершение захвата экрана",
     "video_format": "Формат видео",
-    "playback_fps": "FPS воспроизведения",
+    "playback_fps": "FPS воспроизведения (sec)",
+    "playback_speed": "Скорость воспроизведения",
     "export_path_setting": "Путь сохранения",
     "finalize_button": "Готово",
     "discard_button": "Удалить",
@@ -67,7 +70,23 @@
     "warning_ok": "OK",
     "error_title": "Ошибка",
     "error_ok": "OK",
+
+    "preset_blink_message": "УСТАНОВИТЕ ОБЛАСТЬ ДЛЯ ЗАХВАТА ЭКРАНА, ЛИБО ВЫБЕРИТЕ ГОТОВЫЙ ПРЕСЕТ",
+    "preset_fullscreen": "🖥️ Весь экран",
+    "preset_mobile": "📱 Мобильный (390x844)",
+    "preset_youtube": "📺 YouTube (1920x1080)",
+    "preset_instagram": "📸 Instagram (1080x1350)",
+    "preset_tiktok": "🎬 TikTok (1080x1920)",
+    "preset_4x3": "🖼️ 4:3 (1600x1200)",
+    "preset_16x10": "📺 16:10 (1920x1200)",
+    "save_last_preset": "💾 Сохранить последний пресет",
         
     "_comment_dialogs": "════════════ ДИАЛОГИ ════════════",
-    "confirm_interrupt": "Прервать запись?\n\nТекущая запись будет остановлена.\nВсе данные этой сессии будут удалены."
+    "confirm_interrupt": "Прервать запись?\n\nТекущая запись будет остановлена.\nВсе данные этой сессии будут удалены.",
+
+    "_comment_info_labels": "════════════ ДИАЛОГОВЫЕ ПОДСКАЗКИ ════════════",
+    "info_select_area": "Выберите область для записи",
+    "info_recording": "Запись...",
+    "info_waiting": "Запись начнётся через",
+    "seconds": "сек"
 }

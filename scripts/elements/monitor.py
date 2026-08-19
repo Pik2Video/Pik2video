@@ -1,3 +1,6 @@
+# resources/scripts/elements/monitor.py
+
+
 from PIL import ImageDraw
 
 """

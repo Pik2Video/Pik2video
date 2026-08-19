@@ -13,17 +13,17 @@ class FrameCapturer:
     Серийный захват экрана для screen capture режима.
     
     Отвечает за:
-    - захват кадров с заданным интервалом (кадры в минуту)
+    - захват кадров с заданным интервалом (кадры в секундах)
     - сохранение кадров во временную папку как PNG
     - подсчёт количества кадров
     """
     
-    def __init__(self, output_dir: Path, shots_per_minute: int, region: dict):
+    def __init__(self, output_dir: Path, capture_fps: int, region: dict):
         self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # интервал между кадрами в секундах
-        self.interval = 60.0 / shots_per_minute
+        self.interval = 1.0 / capture_fps
         self.region = region
         
         self._running = False

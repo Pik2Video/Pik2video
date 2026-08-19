@@ -1,12 +1,14 @@
 # src/pik2video/gui/base.py
 
-from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QSizePolicy
+import logging
+
+from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QSizePolicy, QLabel
 from PySide6.QtCore import Qt, QSize, QEvent, Signal, QObject
 from PySide6.QtGui import QCloseEvent
 from src.pik2video.gui.dialogs import confirm
-from src.pik2video.utils import format_timer, format_size
-from .window_positioning import center_to_parent
+from .utils import center_to_parent, keep_window_inside_screen
 
+logger = logging.getLogger(__name__)
 
 class BaseDialog(QDialog):
     """
@@ -22,7 +24,7 @@ class BaseDialog(QDialog):
 
         self.setModal(True)            # Устанавливаем модальность (пока окно открыто — нельзя кликать в другие)
         self.controller = controller   # Контроллер (логика приложения)
-        self._is_positioned = False    # Флаг: уже ли окно было позиционировано
+        #self._is_positioned = False    # Флаг: уже ли окно было позиционировано
 
         # Устанавливаем флаги окна (что у него есть)
         self.setWindowFlags(
@@ -37,17 +39,18 @@ class BaseDialog(QDialog):
 
 
     def showEvent(self, event):
-        # Вызывается, когда окно показывается
         super().showEvent(event)
 
-        # Если есть родитель и окно ещё не позиционировали
-        if self.parent() and not self._is_positioned:
-            self._is_positioned = True
+        if self.parent():
+            parent_geom = self.parent().frameGeometry()
+            # Центрируем по геометрии родителя
+            x = parent_geom.x() + (parent_geom.width() - self.width()) // 2
+            y = parent_geom.y() + (parent_geom.height() - self.height()) // 2
+            self.move(x, y)
+            # Удерживаем в пределах экрана с отступом
+            keep_window_inside_screen(self, margin=80)
 
-            pos = center_to_parent(self, self.parent()) # Вычисляем позицию по центру родителя
-
-            self.move(pos) # Перемещаем окно
-
+    
     def closeEvent(self, event: QCloseEvent):
 
         # Проверяем: можно ли вообще закрывать
@@ -159,7 +162,7 @@ class BaseFormDialog(BaseDialog):
         self.content_layout = QVBoxLayout(self.content_widget)
 
         self.content_layout.setSpacing(6) # Расстояние между элементами внутри формы
-        self.content_layout.setContentsMargins(6, 6, 6, 6) # Отступы внутри блока контента (внутри рамки)
+        self.content_layout.setContentsMargins(3, 3, 3, 3) # Отступы внутри блока контента (внутри рамки)
 
         # Вызываем метод, который должен реализовать наследник
         self.build_content(self.content_layout)
@@ -200,13 +203,17 @@ class BaseFormDialog(BaseDialog):
 class SettingsDialog(BaseFormDialog):
 
     def __init__(self, parent, controller, title="Настройки"):
-        print(f"[DEBUG] SettingsDialog.__init__ - received controller type: {type(controller)}")
+        logger.debug(f"SettingsDialog.__init__ - received controller type: {type(controller)}")
 
         # Инициализация базовой формы
         super().__init__(parent, controller, title)
 
-        print(f"[DEBUG] SettingsDialog.__init__ - after super, self.controller type: {type(self.controller)}")
+        logger.debug(f"SettingsDialog.__init__ - after super, self.controller type: {type(self.controller)}")
         
+        self._parent = parent
+        if self._parent:
+            self._parent.installEventFilter(self)
+
         # Подключаем перевод для кнопок
         self.setup_buttons_localization(controller)
 
@@ -255,6 +262,16 @@ class SettingsDialog(BaseFormDialog):
         # Если всё прошло успешно — закрываем окно
         if result:
             self.close()
+
+    def eventFilter(self, obj, event):
+        from PySide6.QtCore import QEvent
+        if obj == self._parent and event.type() == QEvent.Move:
+            # Обновить позицию при перемещении родителя
+            if self.isVisible():
+                from .utils import center_to_parent, keep_window_inside_screen
+                center_to_parent(self, self._parent)
+                keep_window_inside_screen(self)
+        return super().eventFilter(obj, event)
 
     def apply_settings(self) -> bool:
         # Метод для применения настроек (переопределяется)
@@ -367,11 +384,34 @@ class FinalizeWidget(QWidget):
         """)
         self.btn_delete.clicked.connect(self._on_delete_clicked)
         
-        bottom_layout.addStretch()
+        
         bottom_layout.addWidget(self.btn_done)
-        bottom_layout.addSpacing(110)
-        bottom_layout.addWidget(self.btn_delete)
         bottom_layout.addStretch()
+
+        # 🆕 Метки RAM и TIME между кнопками
+        stats_widget = QWidget()
+        stats_layout = QVBoxLayout(stats_widget)
+        stats_layout.setContentsMargins(0, 0, 0, 0)
+        stats_layout.setSpacing(2)
+        
+        self.stats_ram = QLabel("RAM: 0 KB")
+        self.stats_ram.setStyleSheet("color: #aaa; font-size: 10px; background: transparent; border: none;")
+        self.stats_ram.setAlignment(Qt.AlignCenter)
+        self.stats_ram.setToolTip("Вес текущего файла")
+        
+        self.stats_time = QLabel("00:00:00")
+        self.stats_time.setStyleSheet("color: #aaa; font-size: 10px; background: transparent; border: none;")
+        self.stats_time.setAlignment(Qt.AlignCenter)
+        self.stats_time.setToolTip("Продолжительность последней записи")
+        
+        stats_layout.addWidget(self.stats_ram)
+        stats_layout.addWidget(self.stats_time)
+        
+        bottom_layout.addWidget(stats_widget)
+
+        bottom_layout.addStretch()
+        bottom_layout.addWidget(self.btn_delete)
+        
         
         main_layout.addWidget(bottom_panel)
     
@@ -387,6 +427,13 @@ class FinalizeWidget(QWidget):
     def build_content(self, layout: QVBoxLayout):
         """Переопределяется в наследниках для добавления содержимого"""
         raise NotImplementedError
+
+    def update_stats(self, ram_text: str, time_text: str):
+        """Обновить метки RAM и TIME в финальном окне"""
+        if hasattr(self, 'stats_ram'):
+            self.stats_ram.setText(f"RAM: {ram_text}")
+        if hasattr(self, 'stats_time'):
+            self.stats_time.setText(f"{time_text}")
 
 
 class LocalizedMixin:

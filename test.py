@@ -5,8 +5,8 @@ from src.pik2video.app import Application
 from src.pik2video.application.state_machine import AppState
 from src.pik2video.application.session_types import SessionType
 
-# Словарь для выбора состояния и session_type
-# ключ — аргумент командной строки
+                   # Словарь для выбора состояния и session_type
+                   # ключ — аргумент командной строки
 WINDOWS = {
     "idle": (AppState.IDLE, None),
     "prep_video": (AppState.PREPARING_VIDEO, SessionType.VIDEO),
@@ -18,7 +18,7 @@ WINDOWS = {
 }
 
 def main():
-    # Получаем аргумент командной строки
+                   # Получаем аргумент командной строки
     state_arg = sys.argv[1] if len(sys.argv) > 1 else "idle"
 
     if state_arg not in WINDOWS:
@@ -27,19 +27,19 @@ def main():
             print(" -", key)
         state_arg = "idle"
 
-    # Разбираем AppState и SessionType
+                   # Разбираем AppState и SessionType
     state, session_type = WINDOWS[state_arg]
 
     print(f"[DEV] Запуск состояния: {state_arg} → {state}, session_type={session_type}")
 
-    # Создаём приложение
+                   # Создаём приложение
     app = Application()
 
-    # Устанавливаем DEV состояние напрямую через контроллер
-    # Если state требует session_type (PREPARING, RECORDING, REVIEW) — передаём
+                   # Устанавливаем DEV состояние напрямую через контроллер
+                   # Если state требует session_type (PREPARING, RECORDING, REVIEW) — передаём
     app.controller.set_state_dev(state, session_type=session_type)
 
-    # Запуск Qt главного цикла
+                   # Запуск Qt главного цикла
     app.run()
 
 

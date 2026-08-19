@@ -1,3 +1,6 @@
+# resources/scripts/elements/stand.py
+
+
 from PIL import ImageDraw
 
 """

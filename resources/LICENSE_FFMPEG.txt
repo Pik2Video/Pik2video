@@ -1,0 +1,44 @@
+This application uses FFmpeg.
+
+FFmpeg is a free software project licensed under the GNU Lesser General Public License (LGPL) version 2.1 or later.
+
+FFmpeg source code is available at:
+https://ffmpeg.org/
+
+This application uses unmodified FFmpeg binaries.
+You may replace the FFmpeg binary used by this application with your own version, as permitted under the LGPL license.
+
+---
+
+GNU LESSER GENERAL PUBLIC LICENSE
+Version 2.1, February 1999
+
+Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+
+Everyone is permitted to copy and distribute verbatim copies
+of this license document, but changing it is not allowed.
+
+[Full license text below]
+
+---
+
+```
+              GNU LESSER GENERAL PUBLIC LICENSE
+                   Version 2.1, February 1999
+```
+
+0. This License Agreement applies to any software library or other program
+which contains a notice placed by the copyright holder or other authorized
+party saying it may be distributed under the terms of this Lesser General
+Public License (also called "this License").
+
+[...]
+
+(Рекомендуется вставить полный текст лицензии без сокращений.
+Официальная версия доступна по ссылке ниже)
+
+---
+
+Full license text:
+https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt

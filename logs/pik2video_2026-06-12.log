@@ -1,0 +1,119 @@
+18:45:21 | INFO     | Pik2Video                           | ============================================================
+18:45:21 | INFO     | Pik2Video                           | Логирование настроено
+18:45:21 | INFO     | Pik2Video                           | Режим DEBUG: False
+18:45:21 | INFO     | Pik2Video                           | Файл логов: /Users/admin/Desktop/Pik2Video/logs/pik2video_2026-06-12.log
+18:45:21 | INFO     | Pik2Video                           | ============================================================
+18:45:22 | INFO     | src.pik2video.locale.translator     | Загружен язык: ru из /Users/admin/Desktop/Pik2Video/src/pik2video/locale/ru.json
+18:45:22 | INFO     | src.pik2video.application.controller | FFmpeg найден при старте
+18:45:25 | INFO     | src.pik2video.application.controller | Запрошен PREPARING_SCREEN
+18:45:25 | INFO     | src.pik2video.application.controller | FFmpeg найден
+18:45:27 | INFO     | src.pik2video.application.controller | Запрошен CANCEL_SESSION
+18:45:28 | INFO     | src.pik2video.application.controller | Запрошен PREPARING_VIDEO
+18:45:28 | INFO     | src.pik2video.application.controller | FFmpeg найден
+18:45:29 | INFO     | src.pik2video.application.controller | Запрошен CANCEL_SESSION
+18:45:35 | INFO     | src.pik2video.application.controller | Настройки сохранены
+18:45:35 | INFO     | src.pik2video.locale.translator     | Загружен язык: en из /Users/admin/Desktop/Pik2Video/src/pik2video/locale/en.json
+18:45:35 | INFO     | src.pik2video.locale.translator     | Язык изменен на: en
+18:53:15 | INFO     | src.pik2video.application.controller | Настройки сохранены
+18:53:15 | INFO     | src.pik2video.locale.translator     | Загружен язык: ru из /Users/admin/Desktop/Pik2Video/src/pik2video/locale/ru.json
+18:53:15 | INFO     | src.pik2video.locale.translator     | Язык изменен на: ru
+18:53:21 | INFO     | src.pik2video.application.controller | Запрошен PREPARING_VIDEO
+18:53:21 | INFO     | src.pik2video.application.controller | FFmpeg найден
+18:54:17 | INFO     | src.pik2video.application.controller | Запрошен CANCEL_SESSION
+18:54:40 | INFO     | Pik2Video                           | ============================================================
+18:54:40 | INFO     | Pik2Video                           | Логирование настроено
+18:54:40 | INFO     | Pik2Video                           | Режим DEBUG: False
+18:54:40 | INFO     | Pik2Video                           | Файл логов: /Users/admin/Desktop/Pik2Video/logs/pik2video_2026-06-12.log
+18:54:40 | INFO     | Pik2Video                           | ============================================================
+18:54:40 | INFO     | src.pik2video.locale.translator     | Загружен язык: ru из /Users/admin/Desktop/Pik2Video/src/pik2video/locale/ru.json
+18:54:40 | INFO     | src.pik2video.application.controller | FFmpeg найден при старте
+19:45:02 | INFO     | Pik2Video                           | ============================================================
+19:45:02 | INFO     | Pik2Video                           | Логирование настроено
+19:45:02 | INFO     | Pik2Video                           | Режим DEBUG: False
+19:45:02 | INFO     | Pik2Video                           | Файл логов: /Users/admin/Desktop/Pik2Video/logs/pik2video_2026-06-12.log
+19:45:02 | INFO     | Pik2Video                           | ============================================================
+19:45:02 | INFO     | src.pik2video.locale.translator     | Загружен язык: ru из /Users/admin/Desktop/Pik2Video/src/pik2video/locale/ru.json
+19:45:02 | INFO     | src.pik2video.application.controller | FFmpeg найден при старте
+19:45:03 | INFO     | src.pik2video.application.controller | Запрошен PREPARING_SCREEN
+19:45:03 | INFO     | src.pik2video.application.controller | FFmpeg найден
+19:45:37 | INFO     | src.pik2video.application.controller | Запрошен START_RECORDING
+19:47:30 | INFO     | Pik2Video                           | ============================================================
+19:47:30 | INFO     | Pik2Video                           | Логирование настроено
+19:47:30 | INFO     | Pik2Video                           | Режим DEBUG: False
+19:47:30 | INFO     | Pik2Video                           | Файл логов: /Users/admin/Desktop/Pik2Video/logs/pik2video_2026-06-12.log
+19:47:30 | INFO     | Pik2Video                           | ============================================================
+19:47:30 | INFO     | src.pik2video.locale.translator     | Загружен язык: ru из /Users/admin/Desktop/Pik2Video/src/pik2video/locale/ru.json
+19:47:30 | INFO     | src.pik2video.application.controller | FFmpeg найден при старте
+19:47:36 | INFO     | src.pik2video.application.controller | Запрошен PREPARING_SCREEN
+19:47:36 | INFO     | src.pik2video.application.controller | FFmpeg найден
+19:47:51 | INFO     | src.pik2video.application.controller | Запрошен START_RECORDING
+19:47:54 | INFO     | src.pik2video.application.controller | Запрошен START_RECORDING
+19:48:43 | INFO     | Pik2Video                           | ============================================================
+19:48:43 | INFO     | Pik2Video                           | Логирование настроено
+19:48:43 | INFO     | Pik2Video                           | Режим DEBUG: False
+19:48:43 | INFO     | Pik2Video                           | Файл логов: /Users/admin/Desktop/Pik2Video/logs/pik2video_2026-06-12.log
+19:48:43 | INFO     | Pik2Video                           | ============================================================
+19:48:43 | INFO     | src.pik2video.locale.translator     | Загружен язык: ru из /Users/admin/Desktop/Pik2Video/src/pik2video/locale/ru.json
+19:48:43 | INFO     | src.pik2video.application.controller | FFmpeg найден при старте
+19:49:19 | INFO     | src.pik2video.application.controller | Запрошен PREPARING_SCREEN
+19:49:19 | INFO     | src.pik2video.application.controller | FFmpeg найден
+19:49:42 | INFO     | src.pik2video.application.controller | Запрошен START_RECORDING
+19:50:43 | INFO     | src.pik2video.application.controller | Запрошен STOP_RECORDING
+19:51:05 | INFO     | src.pik2video.application.controller | Запрошен FINALIZE_SESSION
+19:51:05 | INFO     | src.pik2video.application.controller | Видео сохранено: /Users/admin/Desktop/output_5.mp4
+20:07:05 | INFO     | Pik2Video                           | ============================================================
+20:07:05 | INFO     | Pik2Video                           | Логирование настроено
+20:07:05 | INFO     | Pik2Video                           | Режим DEBUG: False
+20:07:05 | INFO     | Pik2Video                           | Файл логов: /Users/admin/Desktop/Pik2Video/logs/pik2video_2026-06-12.log
+20:07:05 | INFO     | Pik2Video                           | ============================================================
+20:07:06 | INFO     | src.pik2video.locale.translator     | Загружен язык: ru из /Users/admin/Desktop/Pik2Video/src/pik2video/locale/ru.json
+20:07:06 | INFO     | src.pik2video.application.controller | FFmpeg найден при старте
+20:07:57 | INFO     | Pik2Video                           | ============================================================
+20:07:57 | INFO     | Pik2Video                           | Логирование настроено
+20:07:57 | INFO     | Pik2Video                           | Режим DEBUG: False
+20:07:57 | INFO     | Pik2Video                           | Файл логов: /Users/admin/Desktop/Pik2Video/logs/pik2video_2026-06-12.log
+20:07:57 | INFO     | Pik2Video                           | ============================================================
+20:07:57 | INFO     | src.pik2video.locale.translator     | Загружен язык: ru из /Users/admin/Desktop/Pik2Video/src/pik2video/locale/ru.json
+20:07:57 | INFO     | src.pik2video.application.controller | FFmpeg найден при старте
+20:07:59 | INFO     | src.pik2video.application.controller | Запрошен PREPARING_SCREEN
+20:07:59 | INFO     | src.pik2video.application.controller | FFmpeg найден
+20:08:32 | INFO     | src.pik2video.application.controller | Запрошен START_RECORDING
+20:09:33 | INFO     | src.pik2video.application.controller | Запрошен STOP_RECORDING
+20:10:03 | INFO     | src.pik2video.application.controller | Запрошен FINALIZE_SESSION
+20:10:03 | WARNING  | src.pik2video.storage.session_storage | Видеофайл не найден в /Users/admin/Desktop/Pik2Video/src/data/tmp/session_20260612_200832
+20:10:03 | ERROR    | src.pik2video.application.controller | Ошибка при экспорте видео
+20:10:25 | INFO     | src.pik2video.application.controller | Запрошен FINALIZE_SESSION
+20:10:25 | WARNING  | src.pik2video.storage.session_storage | Видеофайл не найден в /Users/admin/Desktop/Pik2Video/src/data/tmp/session_20260612_200832
+20:10:25 | ERROR    | src.pik2video.application.controller | Ошибка при экспорте видео
+20:10:40 | INFO     | src.pik2video.application.controller | Запрошен FINALIZE_SESSION
+20:10:40 | WARNING  | src.pik2video.storage.session_storage | Видеофайл не найден в /Users/admin/Desktop/Pik2Video/src/data/tmp/session_20260612_200832
+20:10:40 | ERROR    | src.pik2video.application.controller | Ошибка при экспорте видео
+20:14:12 | INFO     | Pik2Video                           | ============================================================
+20:14:12 | INFO     | Pik2Video                           | Логирование настроено
+20:14:12 | INFO     | Pik2Video                           | Режим DEBUG: False
+20:14:12 | INFO     | Pik2Video                           | Файл логов: /Users/admin/Desktop/Pik2Video/logs/pik2video_2026-06-12.log
+20:14:12 | INFO     | Pik2Video                           | ============================================================
+20:14:12 | INFO     | src.pik2video.locale.translator     | Загружен язык: ru из /Users/admin/Desktop/Pik2Video/src/pik2video/locale/ru.json
+20:14:12 | INFO     | src.pik2video.application.controller | FFmpeg найден при старте
+20:14:39 | INFO     | src.pik2video.application.controller | Запрошен PREPARING_SCREEN
+20:14:39 | INFO     | src.pik2video.application.controller | FFmpeg найден
+20:14:58 | INFO     | src.pik2video.application.controller | Запрошен START_RECORDING
+20:15:57 | INFO     | src.pik2video.application.controller | Запрошен STOP_RECORDING
+20:16:18 | INFO     | src.pik2video.application.controller | Запрошен FINALIZE_SESSION
+20:16:18 | INFO     | src.pik2video.application.controller | Видео сохранено: /Users/admin/Desktop/output.gif
+20:28:25 | INFO     | Pik2Video                           | ============================================================
+20:28:25 | INFO     | Pik2Video                           | Логирование настроено
+20:28:25 | INFO     | Pik2Video                           | Режим DEBUG: False
+20:28:25 | INFO     | Pik2Video                           | Файл логов: /Users/admin/Desktop/Pik2Video/logs/pik2video_2026-06-12.log
+20:28:25 | INFO     | Pik2Video                           | ============================================================
+20:28:25 | INFO     | src.pik2video.locale.translator     | Загружен язык: ru из /Users/admin/Desktop/Pik2Video/src/pik2video/locale/ru.json
+20:28:25 | INFO     | src.pik2video.application.controller | FFmpeg найден при старте
+20:28:27 | INFO     | src.pik2video.application.controller | Запрошен PREPARING_SCREEN
+20:28:27 | INFO     | src.pik2video.application.controller | FFmpeg найден
+20:28:30 | INFO     | src.pik2video.application.controller | Запрошен CANCEL_SESSION
+20:28:37 | INFO     | src.pik2video.application.controller | Запрошен PREPARING_SCREEN
+20:28:37 | INFO     | src.pik2video.application.controller | FFmpeg найден
+20:28:50 | INFO     | src.pik2video.application.controller | Запрошен START_RECORDING
+20:29:25 | INFO     | src.pik2video.application.controller | Запрошен STOP_RECORDING
+20:29:34 | INFO     | src.pik2video.application.controller | Запрошен FINALIZE_SESSION
+20:29:34 | INFO     | src.pik2video.application.controller | Видео сохранено: /Users/admin/Desktop/output.gif

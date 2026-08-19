@@ -1,4 +1,4 @@
-# src/pik2video/gui/window_positioning.py
+# src/pik2video/gui/utils.py
 
 from PySide6.QtCore import Qt, QPoint, QRect
 from PySide6.QtWidgets import QApplication, QWidget
@@ -32,4 +32,13 @@ def bring_window_to_front(window):
     window.raise_()
     window.activateWindow()
 
+def keep_window_inside_screen(window, margin=120):
+    """
+    Перемещает окно внутрь видимого экрана, если оно выходит за границы.
+    margin — отступ от краёв в пикселях.
+    """
+    screen = window.screen().availableGeometry()
+    x = max(screen.left() + margin, min(window.x(), screen.right() - window.width() - margin))
+    y = max(screen.top() + margin, min(window.y(), screen.bottom() - window.height() - margin))
+    window.move(x, y)
 

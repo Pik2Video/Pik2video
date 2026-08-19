@@ -18,7 +18,9 @@
     "language_setting": "Application Language",
     "text_size_setting": "Text Size",
     "show_tooltips": "Show Tooltips",
-    "start_delay": "Start Delay (sec)",
+    "always_on_top": "Always on top",
+
+    "start_delay_setting": "Start Delay (sec)",
 
     "_comment_session_buttons": "════════════ SESSION BUTTONS ════════════",
     "start_button": "Start",
@@ -30,6 +32,7 @@
     "fps_setting": "Frames Per Second (FPS)",
     "quality_setting": "Video Quality",
     "stop_after_setting": "Stop after",
+    "start_delay_setting": "Start Delay (sec)",
     
     "_comment_screen_settings": "════════════ SCREEN CAPTURE SETTINGS ════════════",
     "screen_settings_title": "Screen Capture Settings",
@@ -39,7 +42,8 @@
     "video_finalize_title": "Finalize Video Recording",
     "screen_finalize_title": "Finalize Screen Capture",
     "video_format": "Video Format",
-    "playback_fps": "Playback FPS",
+    "playback_fps": "Playback FPS (sec)",
+    "playback_speed": "Playback Speed",
     "export_path_setting": "Save Path",
     "finalize_button": "Done",
     "discard_button": "Discard",
@@ -67,7 +71,23 @@
     "warning_ok": "OK",
     "error_title": "Error",
     "error_ok": "OK",
+
+    "preset_blink_message": "SET THE SCREEN CAPTURE AREA OR CHOOSE A PRESET",
+    "preset_fullscreen": "🖥️ Full Screen",
+    "preset_mobile": "📱 Mobile (390x844)",
+    "preset_youtube": "📺 YouTube (1920x1080)",
+    "preset_instagram": "📸 Instagram (1080x1350)",
+    "preset_tiktok": "🎬 TikTok (1080x1920)",
+    "preset_4x3": "🖼️ 4:3 (1600x1200)",
+    "preset_16x10": "📺 16:10 (1920x1200)",
+    "save_last_preset": "💾 Save last preset",
     
     "_comment_dialogs": "════════════ DIALOGS ════════════",
-    "confirm_interrupt": "Interrupt recording?\n\nThe current recording will be stopped.\nAll session data will be deleted."
+    "confirm_interrupt": "Interrupt recording?\n\nThe current recording will be stopped.\nAll session data will be deleted.",
+
+    "_comment_info_labels": "════════════ INFO LABELS ════════════",
+    "info_select_area": "Select capture area",
+    "info_recording": "Recording...",
+    "info_waiting": "Recording starts in",
+    "seconds": "sec"
 }
