@@ -7,6 +7,15 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+from src.pik2video.gui.blink_style import (
+    LABEL_ALPHA_DIM,
+    LABEL_ALPHA_BRIGHT,
+    lerp_alpha,
+)
+
+# кнопка с постоянной всплывающей подсказкой
+from src.pik2video.gui.custom_tooltip import TooltipButton
+
 
 class CapturePanel(QWidget):
     """
@@ -47,6 +56,17 @@ class CapturePanel(QWidget):
         """Обновляет тексты на кнопках при смене языка"""
         self.btn_start.setText(self.translator.tr("start_button"))
         self.btn_stop.setText(self.translator.tr("stop_button"))
+
+        # обновляем всплывающие подсказки у кнопок
+        self.btn_back.set_tooltip(self.translator.tr("back_tooltip"))
+
+        # обновляем подсказку у кнопки информации
+        self.btn_info.set_tooltip(self.translator.tr("info_tooltip"))
+
+        # обновляем подсказку у кнопки предварительных настроек
+        self.btn_settings.set_tooltip(self.translator.tr("capture_settings_tooltip"))
+
+        
         # Метки TIME, RAM, SHOTS НЕ переводим - оставляем на английском
     
     # ─────────────────────────────────────────
@@ -70,7 +90,7 @@ class CapturePanel(QWidget):
         top_row.setSpacing(2)
 
         # Кнопка НАЗАД (вне чёрного поля, слева)
-        self.btn_back = QPushButton("⬅️")
+        self.btn_back = TooltipButton("⬅️")
         self.btn_back.setFixedSize(26, 24)
         self.btn_back.setStyleSheet("font-size:11px; background:#282828; border:1px solid #555; border-radius:4px;")
 
@@ -109,7 +129,7 @@ class CapturePanel(QWidget):
         info_layout.addWidget(self.right_label, 0)     # 0 = НЕ растягивается
 
         # Кнопка 📄 (вне чёрного поля, справа)
-        self.btn_info = QPushButton("📄")
+        self.btn_info = TooltipButton("📄")
         self.btn_info.setFixedSize(26, 24)
         self.btn_info.setStyleSheet("font-size:11px; background:#282828; border:1px solid #555; border-radius:4px;")
         self.btn_info.setEnabled(False)  # пока не используется
@@ -161,7 +181,7 @@ class CapturePanel(QWidget):
         h_layout = QHBoxLayout()
         h_layout.addStretch()
 
-        self.btn_settings = QPushButton("⚙️")
+        self.btn_settings = TooltipButton("⚙️")
         self.btn_settings.setFixedSize(self.SETTINGS_WIDTH, self.BUTTON_HEIGHT)
         self.btn_settings.setStyleSheet("font-size:13px;")
 
@@ -261,6 +281,12 @@ class CapturePanel(QWidget):
     def set_info_text(self, text: str):
         self.center_label.setText(text)
 
+    def set_info_blink_phase(self, phase: float):
+        """Установить фазу мигания текста в чёрном поле (0.0 … 1.0)."""
+        alpha = lerp_alpha(phase, LABEL_ALPHA_DIM, LABEL_ALPHA_BRIGHT)
+        self.center_label.setStyleSheet(
+            f"color: rgba(255, 255, 255, {alpha}); font-size: 12px;"
+        )
     def set_left_text(self, text: str):
         """Установить текст в левой части (для сообщения ← назад)"""
         if text:

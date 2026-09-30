@@ -1,6 +1,7 @@
 # src/pik2video/application/state_machine.py
 
 from enum import Enum, auto
+from PySide6.QtCore import QObject, Signal
 
 
 class AppState(Enum):
@@ -12,7 +13,9 @@ class AppState(Enum):
     REVIEW = auto()
 
 
-class StateMachine:
+class StateMachine(QObject):
+    state_changed = Signal(AppState)
+
     """
     Управление состояниями приложения.
 
@@ -22,7 +25,7 @@ class StateMachine:
     """
 
     def __init__(self):
-        
+        super().__init__()
         self._state: AppState = AppState.IDLE
 
     # ---------------------------------------
@@ -34,6 +37,7 @@ class StateMachine:
 
     def _set_state(self, new_state: AppState):
         self._state = new_state
+        self.state_changed.emit(new_state)
 
     # ---------------------------------------
     # ==========TRANSITIONS FROM IDLE========

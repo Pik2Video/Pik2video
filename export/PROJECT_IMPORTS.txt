@@ -2,48 +2,108 @@
 # src/main.py
 from src.pik2video.app import Application
 
-# src/pik2video/app.py
-import sys
-from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt, QTimer
-from src.pik2video.infrastructure.logging import setup_logging
+# src/pik2video/app/__init__.py
+from .application import Application
+
+# src/pik2video/app/application.py
 import logging
-from src.pik2video.utils import format_size, format_time
+from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import Qt, QObject, QEvent
 from src.pik2video.application.controller import AppController
+from src.pik2video.gui.windows import MainWindow
+from src.pik2video.gui.ffmpeg_dialog import FFmpegMissingDialog
+from src.pik2video.gui.utils import bottom_right_position
+from src.pik2video.gui.custom_tooltip import set_tooltips_enabled, is_tooltips_enabled
+from .blink_manager import BlinkManager
+from .window_manager import WindowManager
+from .state_coordinator import StateCoordinator
+
+# src/pik2video/app/blink_manager.py
+import logging
+from PySide6.QtCore import QObject, QTimer, Signal
+
+# src/pik2video/app/state_coordinator.py
+import logging
+from PySide6.QtCore import QObject, Qt, Slot
 from src.pik2video.application.session_types import SessionType
 from src.pik2video.application.state_machine import AppState
-from src.pik2video.gui.windows import MainWindow, AppSettingsDialog
-from src.pik2video.gui.sessions import VideoCaptureSession, ScreenCaptureSession, VideoFinalizeWidget, ScreenFinalizeWidget
+from src.pik2video.gui.preset_window import PresetWindow
+from src.pik2video.gui.utils import bring_window_to_front
+from src.pik2video.utils import format_size, format_time
+from .window_manager import WindowManager
+from .blink_manager import BlinkManager
+
+# src/pik2video/app/window_manager.py
+import logging
+from typing import Optional
+from PySide6.QtCore import QObject
+from PySide6.QtWidgets import QApplication
 from src.pik2video.gui.overlays import CoordinateOverlay
 from src.pik2video.gui.preset_window import PresetWindow
-from src.pik2video.gui.ffmpeg_dialog import FFmpegMissingDialog
-from src.pik2video.gui.utils import bottom_right_position, center_to_parent, bring_window_to_front, keep_window_inside_screen
+from src.pik2video.gui.utils import keep_window_inside_screen, bring_window_to_front
 
 # src/pik2video/application/controller.py
 import logging
-import time
+import psutil
 from pathlib import Path
 from typing import Optional
-from PySide6.QtCore import QObject, Signal, QTimer
-from src.pik2video.infrastructure.ffmpeg.ffmpeg_service import FFmpegService
+from PySide6.QtCore import QObject, Signal
 from .session_types import SessionType
 from .recording_service import RecordingService
-from .session_service import SessionService
-from .settings_model import SettingsModel
-from .state_machine import StateMachine, AppState
-from src.pik2video.utils import format_size, format_time
+from .state_machine import AppState
+from .managers.ffmpeg_manager import FFmpegManager
+from .managers.settings_manager import SettingsManager
+from .managers.state_manager import StateManager
+from .managers.session_manager import SessionManager
+from .managers.recording_manager import RecordingManager
+
+# src/pik2video/application/managers/ffmpeg_manager.py
+import logging
+from PySide6.QtCore import QObject, Signal
+from src.pik2video.infrastructure.ffmpeg.ffmpeg_service import FFmpegService
+
+# src/pik2video/application/managers/recording_manager.py
+import logging
+import time
+from pathlib import Path
+from typing import Optional
+from PySide6.QtCore import QObject, QTimer, Signal
+from ..session_types import SessionType
+from ..state_machine import AppState
+from ..recording_service import RecordingService
+from .settings_manager import SettingsManager
+from .state_manager import StateManager
+from .session_manager import SessionManager
+from src.pik2video.utils import format_time, format_size
+
+# src/pik2video/application/managers/session_manager.py
+import logging
+from pathlib import Path
+from typing import Optional
+from PySide6.QtCore import QObject
+from ..session_service import SessionService
+from ..session_types import SessionType
+
+# src/pik2video/application/managers/settings_manager.py
+import logging
+from pathlib import Path
+from typing import Optional
+from PySide6.QtCore import QObject
+from ..settings_model import SettingsModel
 from src.pik2video.locale.translator import Translator
+from ..session_types import SessionType
+
+# src/pik2video/application/managers/state_manager.py
+import logging
+from PySide6.QtCore import QObject, Signal
+from ..state_machine import StateMachine, AppState
 
 # src/pik2video/application/recording_service.py
-import time
-import threading
-import subprocess
-from pathlib import Path
+import ctypes
 import logging
+from pathlib import Path
 from typing import Optional
-from src.pik2video.core.frame_capturer import FrameCapturer
-from src.pik2video.core.video_assembler import VideoAssembler
-from src.pik2video.core.ffmpeg_video_recorder import FFmpegVideoRecorder
+from PySide6.QtWidgets import QApplication   # <-- НОВОЕ: импорт для получения масштаба
 from .settings_model import SettingsModel
 from .session_types import SessionType
 
@@ -63,6 +123,7 @@ from dataclasses import asdict, dataclass, field
 
 # src/pik2video/application/state_machine.py
 from enum import Enum, auto
+from PySide6.QtCore import QObject, Signal
 
 # src/pik2video/core/ffmpeg_video_recorder.py
 import logging
@@ -141,27 +202,172 @@ from PySide6.QtCore import Qt, Signal
 # src/pik2video/gui/components_settings/setting_row.py
 from PySide6.QtWidgets import QWidget, QLabel, QHBoxLayout, QSpacerItem, QSizePolicy
 
+# src/pik2video/gui/custom_tooltip.py
+from PySide6.QtWidgets import QLabel, QApplication, QPushButton
+from PySide6.QtCore import Qt, QTimer, QPoint
+from PySide6.QtGui import QFont
+
 # src/pik2video/gui/dialogs.py
 from PySide6.QtWidgets import QMessageBox
 
-# src/pik2video/gui/ffmpeg_dialog.py
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton
+# src/pik2video/gui/editor/__init__.py
+from .window import EditorWindow
+from .state import EditorState
+from .drop_zone import DropZone
+from .video_files_panel import VideoFilesPanel
+from .player import PlayerWidget
+from .timeline import TimelineWidget
+from .volume import VolumeControl
+from .tools_panel import ToolsPanel
+from .export_service import ExportService
+
+# src/pik2video/gui/editor/drop_zone.py
+import logging
+import shutil
+import subprocess
+from pathlib import Path
+from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel, QFileIconProvider, QPushButton, QWidget
+from PySide6.QtCore import Qt, Signal, QFileInfo
+from PySide6.QtGui import QPixmap
+
+# src/pik2video/gui/editor/export_dialog.py
+import logging
+import subprocess
+from pathlib import Path
+from PySide6.QtWidgets import (
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QFont
+
+# src/pik2video/gui/editor/export_service.py
+import logging
+import shutil
+from pathlib import Path
+from PySide6.QtCore import QObject, QProcess, Signal
+from .state import EditorState
+
+# src/pik2video/gui/editor/player.py
+import logging
+from PySide6.QtWidgets import (
+from PySide6.QtCore import Qt, Signal, QUrl
+from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PySide6.QtMultimediaWidgets import QVideoWidget
+from .volume import VolumeControl
+
+# src/pik2video/gui/editor/state.py
+import logging
+from pathlib import Path
+from typing import Optional
+from PySide6.QtCore import QObject, Signal
+
+# src/pik2video/gui/editor/timeline.py
+import logging
+from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import Qt, Signal, QRectF, QPointF
+from PySide6.QtGui import QPainter, QColor, QPen, QBrush
+
+# src/pik2video/gui/editor/tools/__init__.py
+from .format import FormatTool
+from .resolution import ResolutionTool
+from .bitrate import BitrateTool
+from .rotation import RotationTool
+from .speed import SpeedTool
+
+# src/pik2video/gui/editor/tools/bitrate.py
+import logging
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QMenu, QLineEdit
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction
+
+# src/pik2video/gui/editor/tools/format.py
+import logging
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QMenu
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction
+
+# src/pik2video/gui/editor/tools/resolution.py
+import logging
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QMenu
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction
+
+# src/pik2video/gui/editor/tools/rotation.py
+import logging
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QMenu
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction
+
+# src/pik2video/gui/editor/tools/speed.py
+import logging
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel
+from PySide6.QtCore import Qt, Signal
+
+# src/pik2video/gui/editor/tools_panel.py
+import logging
+from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel, QWidget, QHBoxLayout
 from PySide6.QtCore import Qt
+from .tools.format import FormatTool
+from .tools.resolution import ResolutionTool
+from .tools.bitrate import BitrateTool
+from .tools.rotation import RotationTool
+from .tools.speed import SpeedTool
+
+# src/pik2video/gui/editor/video_files_panel.py
+import logging
+from pathlib import Path
+from PySide6.QtWidgets import (
+from PySide6.QtCore import Qt, Signal, QFileInfo
+from PySide6.QtGui import QPixmap
+
+# src/pik2video/gui/editor/volume.py
+import logging
+from PySide6.QtWidgets import QWidget, QPushButton, QSlider, QVBoxLayout, QHBoxLayout
+from PySide6.QtCore import Qt, QPoint, QTimer, QEvent
+from PySide6.QtGui import QCursor
+
+# src/pik2video/gui/editor/window.py
+import logging
+from pathlib import Path
+from PySide6.QtWidgets import (
+from PySide6.QtCore import Qt
+from .state import EditorState
+from .drop_zone import DropZone
+from .video_files_panel import VideoFilesPanel
+from .player import PlayerWidget
+from .timeline import TimelineWidget
+from .tools_panel import ToolsPanel
+from .export_dialog import ExportDialog
+
+# src/pik2video/gui/ffmpeg_dialog.py
+from PySide6.QtWidgets import (
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices, QFont
+from src.pik2video.gui.progress_dialog import ProgressDialog
 
 # src/pik2video/gui/overlays.py
 import logging
 from PySide6.QtWidgets import QWidget, QRubberBand
 from PySide6.QtCore import Qt, QRect, QTimer, Signal
 from PySide6.QtGui import QPainter, QColor, QPen, QFont
+from src.pik2video.gui.blink_style import (
 
 # src/pik2video/gui/panels.py
 from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
+from src.pik2video.gui.blink_style import (
+from src.pik2video.gui.custom_tooltip import TooltipButton
 
 # src/pik2video/gui/preset_window.py
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
 from PySide6.QtCore import Qt, Signal, QTimer, QSize
 from PySide6.QtGui import QGuiApplication
+from src.pik2video.gui.blink_style import (
+from src.pik2video.gui.custom_tooltip import TooltipButton
+
+# src/pik2video/gui/progress_dialog.py
+from PySide6.QtWidgets import (
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtGui import QFont
+from src.pik2video.infrastructure.ffmpeg.installer import FFmpegInstaller
 
 # src/pik2video/gui/sessions.py
 from PySide6.QtWidgets import QWidget, QLabel, QApplication, QHBoxLayout, QVBoxLayout, QSpinBox
@@ -193,6 +399,7 @@ from .utils import center_to_parent, keep_window_inside_screen
 from .base import SettingsDialog
 from .sessions import VideoCaptureSession, ScreenCaptureSession
 from .sessions import VideoFinalizeWidget, ScreenFinalizeWidget
+from .custom_tooltip import TooltipButton, set_tooltips_enabled
 
 # src/pik2video/infrastructure/ffmpeg/ffmpeg_service.py
 import logging
@@ -200,8 +407,22 @@ import shutil
 import subprocess
 import platform
 import os
+import sys
 from pathlib import Path
 from typing import Optional
+
+# src/pik2video/infrastructure/ffmpeg/installer.py
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import zipfile
+import tarfile
+from pathlib import Path
+from typing import Optional, Tuple
+from PySide6.QtCore import QObject, Signal
+from src.pik2video.infrastructure.system.platform_detector import get_full_info
 
 # src/pik2video/infrastructure/logging/__init__.py
 from .logger_setup import setup_logging
@@ -211,6 +432,11 @@ import logging
 import sys
 from pathlib import Path
 from datetime import datetime
+
+# src/pik2video/infrastructure/system/platform_detector.py
+import platform
+import sys
+from typing import Dict, Optional
 
 # src/pik2video/locale/translator.py
 import logging

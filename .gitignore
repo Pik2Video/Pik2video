@@ -1,10 +1,32 @@
-# python generated files
+# Python
 __pycache__/
-*.py[oc]
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+env/
+
+# Данные приложения
+data/tmp/
+data/drafts/
+logs/
+src/data/tmp/
+src/data/drafts/
+
+# Сборки
 build/
 dist/
-wheels/
-*.egg-info
+cpp/build/
+*.spec
 
-# venv
-.venv
+# macOS
+.DS_Store
+._*
+
+# IDE
+.vscode/
+.idea/
+
+# Отладка
+full_log.txt
+test_install.py

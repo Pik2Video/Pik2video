@@ -3,11 +3,15 @@
     "app_title": "Pic2Video",
     
     "_comment_main_window": "════════════ ГЛАВНОЕ ОКНО ════════════",
-    "main_window_title": "Главное окно",
+    "main_window_title": "Pik2Video",
+    "video_recording_title": "запись видео",
+    "screen_capture_title": "screen запись",
     "record_video": "запись видео",
     "screen_capture": "screen запись",
     "settings_tooltip": "Глобальные настройки приложения",
     "notifications_tooltip": "О приложении",
+    "stream_button": "запись звука    🔏",
+    "editor_button": "🔏    редактор",
 
     "_comment_buttons": "════════════ КНОПКИ ОКНА НАСТРОЕК════════════",
     "cancel_button": "❌     Отмена",
@@ -32,6 +36,9 @@
     "quality_setting": "Качество видео",
     "stop_after_setting": "Остановить через",
     "start_delay_setting": "Пауза перед стартом (сек)",
+    "back_tooltip": "Вернуться обратно",
+    "info_tooltip": "Инфо",
+    "capture_settings_tooltip": "Предварительные настройки",
     
     "_comment_screen_settings": "════════════ НАСТРОЙКИ ЗАХВАТА ЭКРАНА ════════════",
     "screen_settings_title": "Настройки захвата экрана",
@@ -88,5 +95,28 @@
     "info_select_area": "Выберите область для записи",
     "info_recording": "Запись...",
     "info_waiting": "Запись начнётся через",
-    "seconds": "сек"
+    "seconds": "сек",
+
+    "ffmpeg_missing_title": "FFmpeg не найден",
+    "ffmpeg_missing_header": "FFmpeg   отсутствует",
+    "ffmpeg_missing_message": "FFmpeg — это бесплатная программа для обработки видео и аудио.\n\nБез неё запись и обработка видео в приложении невозможны.\n\nЧто делать?\n1. Установите FFmpeg с официального сайта или через менеджер пакетов.\n2. После установки перезапустите приложение.\n\nРекомендуемый способ установки (macOS):\n  brew install ffmpeg\n\nПодробная инструкция:",
+    "ffmpeg_missing_install": "Установить FFmpeg",
+    "ffmpeg_missing_cancel": "Отмена",
+
+
+    "install_progress_title": "Установка FFmpeg",
+    "installing_ffmpeg": "Установка FFmpeg...",
+    "status_detecting_folder": "Определение папки для установки...",
+    "status_downloading": "Загрузка FFmpeg...",
+    "status_extracting": "Распаковка...",
+    "status_copying": "Копирование файлов...",
+    "status_setting_permissions": "Настройка прав доступа...",
+    "status_verifying": "Проверка установки...",
+    "status_install_success": "FFmpeg успешно установлен",
+    "status_already_installed": "FFmpeg уже установлен",
+    "status_cancelled": "Установка отменена пользователем",
+    "error_install_failed": "Ошибка установки: {}",
+    "error_extract_failed": "Ошибка распаковки: {}",
+    "error_no_executable": "Не удалось найти исполняемый файл ffmpeg в архиве",
+    "error_test_failed": "FFmpeg установлен, но не удалось запустить"
 }

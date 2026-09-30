@@ -19,109 +19,11 @@ from .overlays import CoordinateOverlay
 from .panels import CapturePanel
 
 
-class InfoMessageManager:
-    """Управляет анимированными подсказками в режиме PREPARING"""
-    
-    def __init__(self, panel):  # ← теперь принимаем panel, а не label
-        self.panel = panel
-        self._timer = QTimer()
-        self._timer.timeout.connect(self._next_message)
-        self._current_index = 0
-        self._dot_count = 0
-        self._dot_timer = QTimer()
-        self._dot_timer.timeout.connect(self._update_dots)
-        self._is_animating = False
-        
-        # Список подсказок: (текст, цвет, шрифт, позиция)
-        # позиция: "center", "left", "right"
-        self.messages = [
-            ("выберите область для захвата", "#a3731f", 14, "center"),
-            ("начните зaпись", "#967005", 14, "center"),   # в слове запись буква а на английском !!!
-            ("воспользуйтесь настройками", "#a3731f", 14, "center"),
-            
-            ("информация     →", "#a3731f", 14, "right"),  # будет справа
-            ("←     назад", "#dee3e3", 14, "left"),        # будет слева
-        ]
-    
-    def start(self):
-        """Запускает ротацию подсказок"""
-        self._current_index = 0
-        self._show_message(0)
-        self._timer.start(6000)
-        self._start_dots_animation()
-    
-    def stop(self):
-        """Останавливает анимацию подсказок"""
-        self._timer.stop()
-        self._dot_timer.stop()
-        self._is_animating = False
-    
-    def _next_message(self):
-        """Переход к следующей подсказке"""
-        self._current_index = (self._current_index + 1) % len(self.messages)
-        self._show_message(self._current_index)
-    
-    def _show_message(self, index):
-        """Показывает конкретную подсказку"""
-        text, color, font_size, position = self.messages[index]
-        
-        self._base_text = text
-        self._dot_count = 0
-        
-        # Очищаем все поля сначала
-        self.panel.center_label.setText("")
-        self.panel.clear_side_texts()
-        
-        # Отображаем в зависимости от позиции
-        if position == "center":
-            self.panel.center_label.setText(text)
-            self.panel.center_label.setStyleSheet(f"color: {color}; font-size: {font_size}px;")
-        elif position == "left":
-            self.panel.set_left_text(text)
-            # Меняем цвет для левого текста
-            self.panel.left_label.setStyleSheet(f"color: {color}; font-size: {font_size}px;")
-        elif position == "right":
-            self.panel.set_right_text(text)
-            # Меняем цвет для правого текста
-            self.panel.right_label.setStyleSheet(f"color: {color}; font-size: {font_size}px;")
-    
-    def _start_dots_animation(self):
-        """Запускает анимацию точек в слове 'запись...'"""
-        self._is_animating = True
-        self._dot_timer.start(500)
-    
-    def _update_dots(self):
-        """Обновляет анимацию точек"""
-        if not self._is_animating:
-            return
-        
-        # Анимация работает ТОЛЬКО для центрального текста
-        text = self.panel.center_label.text()
-        
-        if not text:
-            return
-        
-        if "запись" in text:
-            base = text.replace("запись...", "запись").replace("запись..", "запись").replace("запись.", "запись")
-            dots = "." * (self._dot_count % 4)
-            new_text = base.replace("запись", f"запись{dots}")
-
-            self.panel.center_label.setStyleSheet(f"color: #8B0000; font-size: 14px;")
-            self.panel.center_label.setText(new_text)
-            self._dot_count += 1
-        elif "record" in text.lower():
-            base = text.lower().replace("record...", "record").replace("record..", "record").replace("record.", "record")
-            dots = "." * (self._dot_count % 4)
-            new_text = base.replace("record", f"record{dots}")
-            self.panel.center_label.setText(new_text)
-            self._dot_count += 1
-
-
 class CaptureSession(QWidget):
 
     closed_by_user = Signal()
-
     back_requested = Signal()
+
     """
     Базовая сессия захвата. Управляет:
     - overlay / состоянием / таймерами / запретом закрытия
@@ -139,9 +41,6 @@ class CaptureSession(QWidget):
 
         # ───────── UI ─────────
         self.panel = CapturePanel(self, controller)
-
-        # 🆕 СОЗДАЁМ МЕНЕДЖЕР ПОДСКАЗОК
-        self.message_manager = InfoMessageManager(self.panel)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -161,22 +60,20 @@ class CaptureSession(QWidget):
         self.cpu_timer.timeout.connect(self._request_cpu_update)
         self.ram_timer.timeout.connect(self._request_shots_update)
 
-     
     # ──────── Старт сессии ─────────────
     def start_session(self):
         self._active = True
         self.time_timer.start(self.TIME_INTERVAL)
         self.ram_timer.start(self.RAM_INTERVAL)
-        self.cpu_timer.start(self.RAM_INTERVAL)  # 🆕 добавь запуск CPU таймера
+        self.cpu_timer.start(self.RAM_INTERVAL)  # запуск CPU таймера
 
     # ──────── Стоп сессии ────────
     def stop_session(self):
         self._active = False
         self.time_timer.stop()
         self.ram_timer.stop()
-        self.cpu_timer.stop()  # 🆕 добавь остановку CPU таймера
+        self.cpu_timer.stop()  # остановка CPU таймера
 
-    # 🆕 НОВЫЙ МЕТОД — вставить здесь
     def set_waiting_mode(self):
         """Режим ожидания перед стартом записи"""
         self.panel.btn_start.setEnabled(False)
@@ -219,9 +116,21 @@ class CaptureSession(QWidget):
             except RuntimeError:
                 pass
 
+    def set_info_text(self, text: str):
+        """Показать текст в чёрном информационном поле (центральная метка)."""
+        if self.panel:
+            try:
+                self.panel.set_info_text(text)
+            except RuntimeError:
+                pass
 
-
-
+    def set_blink_phase(self, phase: float):
+        """Прокинуть фазу мигания в панель."""
+        if self.panel:
+            try:
+                self.panel.set_info_blink_phase(phase)
+            except RuntimeError:
+                pass
 
     # ───── Внутренние события ─────
     def _request_time_update(self):
@@ -251,14 +160,12 @@ class CaptureSession(QWidget):
         """Анимация точек во время записи"""
         self._dot_count = (self._dot_count + 1) % 4
         dots = "." * self._dot_count
-
         self.panel.update_recording_dots(f"запись{dots}")
 
     def create_settings_dialog(self):
         raise NotImplementedError
 
     # ───── Qt события ─────
-
     def on_before_close(self) -> bool:
         """
         Решает, можно ли закрыть окно.
@@ -285,15 +192,11 @@ class CaptureSession(QWidget):
         # для остальных состояний (IDLE и т.д.) можно просто закрыть
         return True
 
-    
-
     # ───── Дополнительные сигналы ─────
     time_update_requested = Signal()
     ram_update_requested = Signal()
     shots_update_requested = Signal()
     cpu_update_requested = Signal()
-
-
 
 ''' Окно записи видео. '''
 class VideoCaptureSession(CaptureSession):
@@ -311,10 +214,7 @@ class VideoCaptureSession(CaptureSession):
 
         self.panel.btn_start.clicked.connect(self._on_start_clicked)
         self.panel.btn_stop.clicked.connect(self._on_stop_clicked)
-
         self.cpu_update_requested.connect(self._update_cpu)
-
-        self.message_manager.start()
 
     # ───────── КНОПКИ ─────────
     def _on_start_clicked(self):
@@ -331,28 +231,19 @@ class VideoCaptureSession(CaptureSession):
     # ───────── ВЫЗЫВАЕТСЯ ИЗ Application ─────────
     def set_recording_mode(self):
         """Application сообщает, что запись началась"""
-        # Останавливаем ротацию подсказок
-        self.message_manager.stop()
-        
-        # Переключаем панель в режим записи
-        self.panel.set_recording_mode()
-        
-        # Настраиваем чёрное поле для VIDEO режима
-        self.panel.set_recording_video_mode()
-        
+        self.panel.set_info_blink_phase(1.0)
+
+        self.panel.set_recording_mode() # Переключаем панель в режим записи
+        self.panel.set_recording_video_mode() # Настраиваем чёрное поле для VIDEO режима
         # Запускаем анимацию точек
         self._dot_count = 0
         self._dot_timer = QTimer()
         self._dot_timer.timeout.connect(self._animate_dots)
         self._dot_timer.start(300)
-        
         # Управление кнопками
         self.panel.btn_start.setEnabled(False)
         self.panel.btn_stop.setEnabled(True)
-        
-        # Запускаем таймеры обновления
-        self.start_session()
-
+        self.start_session() # Запускаем таймеры обновления
 
     def set_idle_mode(self):
         """ Application вызывает, когда запись остановлена. """
@@ -362,10 +253,8 @@ class VideoCaptureSession(CaptureSession):
         self.panel.btn_stop.setEnabled(False)
         self.stop_session()
 
-    
     def _on_closed_by_user(self):
         self.cancel_requested.emit()
-
 
     def _update_cpu(self):
         usage = self.controller.get_cpu_usage()
@@ -384,18 +273,13 @@ class ScreenCaptureSession(CaptureSession):
             title="захват экрана",
         )
 
-        
         #self.panel.counter_label.setVisible(True) # Показываем метку SHOTS только для экрана
-
         # Подключение кнопок к сигналам
         self.panel.btn_start.clicked.connect(self._on_start_clicked)
         self.panel.btn_stop.clicked.connect(self._on_stop_clicked)
 
         self.cpu_update_requested.connect(self._update_cpu)
 
-        self.message_manager.start()
-
-        
     # ───────── Кнопки ─────────
     def _on_start_clicked(self):
         """Пользователь нажал START"""
@@ -411,15 +295,10 @@ class ScreenCaptureSession(CaptureSession):
     # ───────── Вызовы из Application ─────────
     def set_recording_mode(self):
         """Application сообщает, что запись началась"""
-        # Останавливаем ротацию подсказок
-        self.message_manager.stop()
+        self.panel.set_info_blink_phase(1.0)
         
-        # Переключаем панель в режим записи
-        self.panel.set_recording_mode()
-        
-        # Настраиваем чёрное поле для SCREEN режима
-        self.panel.set_recording_screen_mode()
-        
+        self.panel.set_recording_mode() # Переключаем панель в режим записи
+        self.panel.set_recording_screen_mode() # Настраиваем чёрное поле для SCREEN режима
         # Запускаем анимацию точек (теперь в центре)
         self._dot_count = 0
         self._dot_timer = QTimer()
@@ -431,8 +310,7 @@ class ScreenCaptureSession(CaptureSession):
         self.panel.btn_settings.setEnabled(False)
         self.panel.btn_stop.setEnabled(True)
         
-        # Запускаем таймеры обновления
-        self.start_session()
+        self.start_session() # Запускаем таймеры обновления
 
     def set_idle_mode(self):
         """Application сообщает, что запись остановлена"""
@@ -442,31 +320,22 @@ class ScreenCaptureSession(CaptureSession):
         self.panel.btn_stop.setEnabled(False)  # ← выключаем кнопку стоп
         self.stop_session()
 
-    
     def _on_closed_by_user(self):
         self.cancel_requested.emit()
-
 
     def _update_cpu(self):
         usage = self.controller.get_cpu_usage()
         self.set_cpu(f"CPU: {usage} %")
-
-
 
 ''' Окно настроек записи видео. Record '''
 class RecordSettingsDialog(SettingsDialog):
     def __init__(self, parent, controller):
         self.controller = controller
         super().__init__(parent, controller, title="")
-        
-        # Подключаем локализацию ПОСЛЕ создания UI
-        self.setup_localization()
+        self.setup_localization() # Подключаем локализацию ПОСЛЕ создания UI
 
     def build_content(self, layout):
-
-        # 🆕 Устанавливаем минимальную ширину (как в глобальных настройках)
-        self.content_widget.setMinimumWidth(480)
-
+        self.content_widget.setMinimumWidth(480) # Устанавливаем минимальную ширину (как в глобальных настройках)
         # Сохраняем строки как атрибуты
         self.export_filename_input = ExportFilenameInput(
             initial=self.controller.get_export_filename()
@@ -491,7 +360,6 @@ class RecordSettingsDialog(SettingsDialog):
         self.row_quality = SettingRow("", self.quality_switcher)
         layout.addWidget(self.row_quality)
 
-
         # Пауза перед стартом
         self.start_delay_input = CleanSpinBox()
         self.start_delay_input.setRange(0, 30)
@@ -499,7 +367,6 @@ class RecordSettingsDialog(SettingsDialog):
         self.start_delay_input.setMinimumWidth(60)
         self.start_delay_input.setAlignment(Qt.AlignCenter)
         self.start_delay_input.setButtonSymbols(QSpinBox.NoButtons)
-        
         self.row_start_delay = SettingRow("", self.start_delay_input)
         layout.addWidget(self.row_start_delay)
 
@@ -534,7 +401,6 @@ class RecordSettingsDialog(SettingsDialog):
         self.controller.set_record_fps(self.fps_switcher.get())
         self.controller.set_record_quality(self.quality_switcher.get())
         self.controller.set_start_delay(self.start_delay_input.value())  # 🆕
-
         self.controller.set_record_timer(self.timer_input.get_seconds())
         return True
 
@@ -543,16 +409,11 @@ class ScreenSettingsDialog(SettingsDialog):
     def __init__(self, parent, controller):
         self.controller = controller
         super().__init__(parent, controller, title="")
-
         #self.setFixedSize(440, 180)
-        
-        # Подключаем локализацию ПОСЛЕ создания UI
-        self.setup_localization()
+        self.setup_localization() # Подключаем локализацию ПОСЛЕ создания UI
 
     def build_content(self, layout):
-
-        # 🆕 Устанавливаем минимальную ширину (как в глобальных настройках)
-        self.content_widget.setMinimumWidth(480)
+        self.content_widget.setMinimumWidth(480)  # 🆕 Устанавливаем минимальную ширину (как в глобальных настройках)
         
         # Сохраняем строки как атрибуты
         self.export_filename_input = ExportFilenameInput(
@@ -574,10 +435,8 @@ class ScreenSettingsDialog(SettingsDialog):
         self.start_delay_input.setMinimumWidth(60)
         self.start_delay_input.setAlignment(Qt.AlignCenter)
         self.start_delay_input.setButtonSymbols(QSpinBox.NoButtons)
-        
         self.row_start_delay = SettingRow("", self.start_delay_input)
         layout.addWidget(self.row_start_delay)
-
 
         # Таймер
         self.timer_input = TimerInput()
@@ -611,8 +470,6 @@ class ScreenSettingsDialog(SettingsDialog):
         self.controller.set_screen_timer(self.timer_input.get_seconds())
         return True
 
-
-
 ''' ФИНАЛЬНОЕ ОКНО ВИДЕОЗАПИСИ '''
 class VideoFinalizeWidget(FinalizeWidget):
     """Виджет финализации видео (встраивается в MainWindow)"""
@@ -620,7 +477,6 @@ class VideoFinalizeWidget(FinalizeWidget):
     def __init__(self, parent, controller):
         super().__init__(parent, controller, title="")
         self.build_content(self.content_layout)
-
         self.retranslate_ui()
     
     def retranslate_ui(self):
@@ -628,7 +484,6 @@ class VideoFinalizeWidget(FinalizeWidget):
         super().retranslate_ui()
         if hasattr(self, 'row_format'):
             self.row_format.setText(self.translator.tr("video_format"))
-
         if hasattr(self, 'row_resolution'):
             self.row_resolution.setText(self.translator.tr("resolution"))
         if hasattr(self, 'row_bitrate'):
@@ -645,8 +500,6 @@ class VideoFinalizeWidget(FinalizeWidget):
         self.row_format = SettingRow("", self.video_format_selector)
         layout.addWidget(self.row_format)
         self.video_format_selector.valueChanged.connect(self.controller.set_video_format)
-
-
 
         # 🆕 Разрешение
         self.resolution_selector = ResolutionSelector(
@@ -699,11 +552,8 @@ class VideoFinalizeWidget(FinalizeWidget):
         preview_layout.addStretch()
         preview_layout.addWidget(self.preview_ram)
         
-        
         layout.addWidget(preview_widget)
 
-
-        
         # Путь сохранения
         self.export_path_input = ExportPathInput(
             controller=self.controller,
@@ -711,7 +561,6 @@ class VideoFinalizeWidget(FinalizeWidget):
         )
         layout.addWidget(self.export_path_input)
         self.export_path_input.valueChanged.connect(self.controller.set_export_path)
-
 
 ''' ФИНАЛЬНОЕ ОКНО СЕРИЙНОГО ЗАХВАТА '''
 class ScreenFinalizeWidget(FinalizeWidget):
@@ -737,7 +586,6 @@ class ScreenFinalizeWidget(FinalizeWidget):
         if hasattr(self, 'row_speed'):
             self.row_speed.setText(self.translator.tr("playback_speed"))
 
-
         if hasattr(self, 'row_resolution'):
             self.row_resolution.setText(self.translator.tr("resolution"))
         if hasattr(self, 'row_bitrate'):
@@ -753,7 +601,6 @@ class ScreenFinalizeWidget(FinalizeWidget):
         self.row_format = SettingRow("", self.video_format_selector)
         layout.addWidget(self.row_format)
         self.video_format_selector.valueChanged.connect(self.controller.set_video_format)
-
 
         # 🆕 Разрешение
         self.resolution_selector = ResolutionSelector(
@@ -780,8 +627,6 @@ class ScreenFinalizeWidget(FinalizeWidget):
         layout.addWidget(self.row_rotation)
         self.rotation_selector.valueChanged.connect(self.controller.set_rotation)
 
-
-
         # виджет FPS воспроизведения
         self.playback_fps = PlaybackFpsInput(
             initial=self.controller.get_screen_finalize_fps()
@@ -790,13 +635,11 @@ class ScreenFinalizeWidget(FinalizeWidget):
         layout.addWidget(self.row_fps)
         self.playback_fps.valueChanged.connect(self.controller.set_screen_finalize_fps)
 
-
         # 🆕 Пресеты скорости (под FPS сборки)
         self.speed_preset = SpeedPresetSelector()
         self.row_speed = SettingRow("", self.speed_preset)
         layout.addWidget(self.row_speed)
         self.speed_preset.valueChanged.connect(self.controller.set_speed_multiplier)
-
 
         # 🆕 Живые метки (предпросмотр при экспорте)
         preview_widget = QWidget()
@@ -816,7 +659,6 @@ class ScreenFinalizeWidget(FinalizeWidget):
         self.preview_ram.setStyleSheet("color: #ccc; font-size: 12px; background: transparent; border: none;")
         self.preview_ram.setAlignment(Qt.AlignCenter)
         
-        
         preview_layout.addWidget(self.preview_time)
         preview_layout.addStretch()
         preview_layout.addWidget(self.preview_label)
@@ -824,8 +666,6 @@ class ScreenFinalizeWidget(FinalizeWidget):
         preview_layout.addWidget(self.preview_ram)
         
         layout.addWidget(preview_widget)
-        
-
         
         self.export_path_input = ExportPathInput(
             controller=self.controller,

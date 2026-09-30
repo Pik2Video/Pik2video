@@ -8,7 +8,6 @@ class SessionService:
     Управление сессиями: создание, экспорт, очистка.
     """
     def __init__(self, base_tmp_dir: Path):
-        
         self.storage = SessionStorage(base_tmp_dir)
 
     def create_session(self) -> Path:
@@ -24,6 +23,10 @@ class SessionService:
         """Возвращает количество кадров в сессии"""
         return self.storage.get_frame_count()
 
+    def get_video_path(self):
+        """Вернуть путь к видеофайлу в текущей сессии."""
+        return self.storage.get_video_path()
+
     def export_session(self, target_dir: Path, filename: str, extension: str = ".mp4") -> Optional[Path]:
         """
         Экспортирует видео.
@@ -31,6 +34,7 @@ class SessionService:
         Args:
             target_dir: папка для сохранения
             filename: имя файла (без расширения)
+            extension: расширение (например .mp4)
         
         Returns:
             Путь к финальному файлу или None

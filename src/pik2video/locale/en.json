@@ -3,11 +3,15 @@
     "app_title": "Pic2Video",
     
     "_comment_main_window": "════════════ MAIN WINDOW ════════════",
-    "main_window_title": "Main Window",
+    "main_window_title": "Pik2Video",
+    "video_recording_title": "Video Recording",
+    "screen_capture_title": "Screen Capture",
     "record_video": "Record Video",
     "screen_capture": "Screen Capture",
     "settings_tooltip": "Global application settings",
     "notifications_tooltip": "Notifications",
+    "stream_button": "Audio Recording    🔏",
+    "editor_button": "🔏    Editor",
 
     "_comment_buttons": "════════════ BUTTONS ════════════",
     "cancel_button": "Cancel",
@@ -32,7 +36,9 @@
     "fps_setting": "Frames Per Second (FPS)",
     "quality_setting": "Video Quality",
     "stop_after_setting": "Stop after",
-    "start_delay_setting": "Start Delay (sec)",
+    "back_tooltip": "Go back",
+    "info_tooltip": "Info",
+    "capture_settings_tooltip": "Pre-recording settings",
     
     "_comment_screen_settings": "════════════ SCREEN CAPTURE SETTINGS ════════════",
     "screen_settings_title": "Screen Capture Settings",
@@ -89,5 +95,28 @@
     "info_select_area": "Select capture area",
     "info_recording": "Recording...",
     "info_waiting": "Recording starts in",
-    "seconds": "sec"
+    "seconds": "sec",
+
+    "ffmpeg_missing_title": "FFmpeg not found",
+    "ffmpeg_missing_header": "FFmpeg is missing",
+    "ffmpeg_missing_message": "FFmpeg is a free program for video and audio processing.\n\nRecording and processing video in the application is impossible without it.\n\nWhat to do?\n1. Install FFmpeg from the official website or via package manager.\n2. After installation, restart the application.\n\nRecommended installation method (macOS):\n  brew install ffmpeg\n\nDetailed instructions:",
+    "ffmpeg_missing_install": "Install FFmpeg",
+    "ffmpeg_missing_cancel": "Cancel",
+
+
+    "install_progress_title": "Installing FFmpeg",
+    "installing_ffmpeg": "Installing FFmpeg...",
+    "status_detecting_folder": "Determining installation folder...",
+    "status_downloading": "Downloading FFmpeg...",
+    "status_extracting": "Extracting...",
+    "status_copying": "Copying files...",
+    "status_setting_permissions": "Setting permissions...",
+    "status_verifying": "Verifying installation...",
+    "status_install_success": "FFmpeg successfully installed",
+    "status_already_installed": "FFmpeg already installed",
+    "status_cancelled": "Installation cancelled by user",
+    "error_install_failed": "Installation error: {}",
+    "error_extract_failed": "Extraction error: {}",
+    "error_no_executable": "Could not find ffmpeg executable in archive",
+    "error_test_failed": "FFmpeg installed but could not be executed"
 }

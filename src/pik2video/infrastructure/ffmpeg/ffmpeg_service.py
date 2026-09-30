@@ -1,9 +1,12 @@
+#src/pik2video/infrastructure/ffmpeg/ffmpeg_service.py
+
 import logging
 
 import shutil
 import subprocess
 import platform
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -27,25 +30,52 @@ class FFmpegService:
     }
 
     def is_installed(self) -> bool:
-        """Проверяет доступность ffmpeg (включая homebrew для GUI)"""
-        # Стандартный поиск
+        """
+        Проверяет доступность ffmpeg:
+        1. В системном PATH (через shutil.which)
+        2. В папке ~/Downloads
+        3. В папке рядом с исполняемым файлом приложения (для портативности)
+        """
+        # 1. Проверка в PATH
         result = shutil.which("ffmpeg")
         if result:
+            logger.debug(f"FFmpeg найден в PATH: {result}")
             return True
-        
-        # Поиск в homebrew (для GUI-запуска)
-        brew_paths = [
-            "/opt/homebrew/bin/ffmpeg",
-            "/usr/local/bin/ffmpeg",
-        ]
-        for path in brew_paths:
-            if os.path.isfile(path) and os.access(path, os.X_OK):
-                logger.debug(f"FFmpeg найден: {path}")
-                return True
-        
-        logger.warning("FFmpeg не найден в системе")
-        return False
 
+        # 2. Проверка в ~/Downloads
+        downloads = Path.home() / "Downloads"
+        ffmpeg_download = downloads / "ffmpeg"
+        if ffmpeg_download.exists() and os.access(ffmpeg_download, os.X_OK):
+            logger.debug(f"FFmpeg найден в Downloads: {ffmpeg_download}")
+            return True
+
+        # 3. Проверка рядом с приложением (для портативной сборки)
+        # Если приложение запущено как .app на macOS, путь к исполняемому файлу внутри .app
+        if getattr(sys, 'frozen', False):
+            # Запущено как собранное приложение (PyInstaller и т.п.)
+            base_dir = Path(sys.executable).parent
+            ffmpeg_local = base_dir / "ffmpeg"
+            if ffmpeg_local.exists() and os.access(ffmpeg_local, os.X_OK):
+                logger.debug(f"FFmpeg найден рядом с приложением: {ffmpeg_local}")
+                return True
+            # Также проверим в Resources (для macOS .app)
+            resources_dir = base_dir.parent / "Resources"
+            ffmpeg_resources = resources_dir / "ffmpeg"
+            if ffmpeg_resources.exists() and os.access(ffmpeg_resources, os.X_OK):
+                logger.debug(f"FFmpeg найден в Resources: {ffmpeg_resources}")
+                return True
+
+        # 4. Проверка в папке приложения (AppData/Library Application Support)
+        app_support_dir = self._get_app_support_dir()
+        if app_support_dir:
+            ffmpeg_local = app_support_dir / self._get_executable_name()
+            if ffmpeg_local.exists() and os.access(ffmpeg_local, os.X_OK):
+                logger.debug(f"FFmpeg найден в папке приложения: {ffmpeg_local}")
+                return True
+
+        # Если не нашли – возвращаем False
+        logger.warning("FFmpeg не найден ни в одном из проверенных мест")
+        return False
 
     def get_version(self) -> Optional[str]:
         """Получить версию ffmpeg"""
@@ -206,3 +236,29 @@ class FFmpegService:
             return encoder in result.stdout
         except Exception:
             return False
+
+    def _get_app_support_dir(self) -> Optional[Path]:
+        """
+        Возвращает папку, куда мы устанавливаем FFmpeg (приложение).
+        """
+        system = platform.system()
+        if system == 'Darwin':  # macOS
+            home = Path.home()
+            return home / 'Library' / 'Application Support' / 'Pik2Video'
+        elif system == 'Windows':
+            appdata = os.environ.get('APPDATA')
+            if appdata:
+                return Path(appdata) / 'Pik2Video'
+            else:
+                return Path.home() / 'AppData' / 'Roaming' / 'Pik2Video'
+        elif system == 'Linux':
+            return Path.home() / '.local' / 'share' / 'Pik2Video'
+        else:
+            return None
+
+    def _get_executable_name(self) -> str:
+        """Возвращает имя исполняемого файла в зависимости от ОС"""
+        if platform.system() == 'Windows':
+            return 'ffmpeg.exe'
+        else:
+            return 'ffmpeg'

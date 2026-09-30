@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
 
 from PySide6.QtCore import Qt, Signal, QEvent
 
-
 from .components_settings.setting_row import SettingRow
 from .components_settings.global_settings import (
     LanguageSetting,
@@ -22,26 +21,36 @@ from .base import SettingsDialog
 from .sessions import VideoCaptureSession, ScreenCaptureSession
 from .sessions import VideoFinalizeWidget, ScreenFinalizeWidget
 
+# импортируем кнопку с постоянной всплывающей подсказкой
+from .custom_tooltip import TooltipButton, set_tooltips_enabled
+
 logger = logging.getLogger(__name__)
 
 ''' ГЛАВНОЕ ОКНО '''
 class MainWindow(QMainWindow):
     # Сигналы для общения с Application
+    window_state_changed = Signal(Qt.WindowStates, Qt.WindowStates)  # oldState, newState
+
     start_video_requested = Signal()
     start_screen_requested = Signal()
     settings_requested = Signal()
+    editor_requested = Signal()
 
     def __init__(self, controller):
         super().__init__()
 
         self.controller = controller
         self.translator = controller.get_translator()
+        self._title_mode = 'idle'
+        self._editor_visible = False
 
         # ───── БАЗОВЫЕ НАСТРОЙКИ ОКНА ─────
         self.setWindowFlag(Qt.Window)
+
+        self.setAttribute(Qt.WidgetAttribute.WA_AlwaysShowToolTips, True)
+
         self.setAttribute(Qt.WA_QuitOnClose, True)
 
-        self.setWindowTitle("главное окно")
         self.setFixedSize(430, 80)
 
         self.setStyleSheet("""
@@ -70,12 +79,9 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        
         # ───── СОЗДАЁМ CENTRAL + ROOT LAYOUT ─────
         central = QWidget()
         self.setCentralWidget(central)
-
-        
 
         # 🆕 Фоновое изображение
         import sys
@@ -88,8 +94,6 @@ class MainWindow(QMainWindow):
 
         bg_path = base_path / "resources" / "backgrounds" / "main_bg.png"
 
-        
-
         self.root_layout = QVBoxLayout(central)
         self.root_layout.setContentsMargins(1, 1, 1, 1)
 
@@ -97,7 +101,6 @@ class MainWindow(QMainWindow):
         self.container = QWidget()
         self.container_layout = QVBoxLayout(self.container)
         self.container_layout.setContentsMargins(0, 0, 0, 0)
-
         self.root_layout.addWidget(self.container)
 
         # ───── текущая активная сессия ─────
@@ -105,6 +108,13 @@ class MainWindow(QMainWindow):
 
         # ───── ПОКАЗЫВАЕМ ПЕРВЫЙ ЭКРАН ─────
         self.show_idle_screen()
+
+    def changeEvent(self, event):  # ← новый метод
+        if event.type() == QEvent.WindowStateChange:
+            old_state = event.oldState()
+            new_state = self.windowState()
+            self.window_state_changed.emit(old_state, new_state)
+        super().changeEvent(event)
 
     # =========================================================
     # 🔴 ПЕРЕКЛЮЧЕНИЕ ЭКРАНОВ
@@ -122,6 +132,12 @@ class MainWindow(QMainWindow):
 
         # 🆕 Убедимся, что окно не вылезает за пределы экрана
         keep_window_inside_screen(self, margin=20)
+
+    def set_editor_visible(self, visible: bool):
+        """Установить флаг «редактор открыт» и обновить кнопку."""
+        self._editor_visible = visible
+        if hasattr(self, 'btn_editor'):
+            self.btn_editor.setEnabled(not visible)
 
     # =========================================================
     # 🟢 IDLE ЭКРАН (главный)
@@ -156,17 +172,18 @@ class MainWindow(QMainWindow):
         # СТРОКА 1 (прижата вправо)
         row1 = QHBoxLayout()
         row1.setSpacing(4)
-        #row1.addStretch()
 
-        self.btn_editor = QPushButton("🔏    редактор")
+        self.btn_editor = QPushButton("🔏          редактор")
         self.btn_editor.setFixedSize(W, 22)
-        self.btn_editor.setEnabled(False)
+        self.btn_editor.clicked.connect(self.editor_requested.emit)
 
         self.btn_record = QPushButton("запись видео")
         self.btn_record.setFixedSize(W, 22)
         self.btn_record.clicked.connect(self.start_video_requested.emit)
 
-        self.btn_settings = QPushButton("⚙️")
+        # кнопка с постоянной всплывающей подсказкой
+        self.btn_settings = TooltipButton("⚙️")
+
         self.btn_settings.setFixedSize(S, 22)
         self.btn_settings.clicked.connect(self.settings_requested.emit)
 
@@ -179,14 +196,16 @@ class MainWindow(QMainWindow):
         row2 = QHBoxLayout()
         row2.setSpacing(4)
 
-        self.btn_notify = QPushButton("📄")
+        # кнопка с постоянной всплывающей подсказкой
+        self.btn_notify = TooltipButton("📄")
+
         self.btn_notify.setFixedSize(S, 22)
 
         self.btn_screen = QPushButton("screen запись")
         self.btn_screen.setFixedSize(W, 22)
         self.btn_screen.clicked.connect(self.start_screen_requested.emit)
 
-        self.btn_stream = QPushButton("стрим     🔏")
+        self.btn_stream = QPushButton("запись звука     🔏")
         self.btn_stream.setFixedSize(W, 22)
         self.btn_stream.setEnabled(False)
 
@@ -202,8 +221,8 @@ class MainWindow(QMainWindow):
         self.set_screen(widget)
         self.current_session = None
         self.setFixedSize(430,80)
+        self._title_mode = 'idle'
         self.setup_localization()
-
 
     def setup_localization(self):
         """Подключаем систему переводов"""
@@ -213,14 +232,34 @@ class MainWindow(QMainWindow):
     def retranslate_ui(self):
         """Обновляет все тексты при смене языка"""
         logger.debug(f"retranslate_ui вызван, язык: {self.translator.get_current_language()}")
-        self.setWindowTitle(self.translator.tr("main_window_title"))
+        self._update_window_title()
         
         # Обновляем текст на кнопках, если они уже созданы
         if hasattr(self, 'btn_record'):
             self.btn_record.setText(self.translator.tr("record_video"))
             self.btn_screen.setText(self.translator.tr("screen_capture"))
-            self.btn_settings.setToolTip(self.translator.tr("settings_tooltip"))
-            self.btn_notify.setToolTip(self.translator.tr("notifications_tooltip"))
+            self.btn_stream.setText(self.translator.tr("stream_button"))
+            self.btn_editor.setText(self.translator.tr("editor_button"))
+            # обновляем текст всплывающей подсказки у кнопки настроек
+            self.btn_settings.set_tooltip(self.translator.tr("settings_tooltip"))
+            # обновляем текст всплывающей подсказки у кнопки уведомлений
+            self.btn_notify.set_tooltip(self.translator.tr("notifications_tooltip"))
+
+    def _update_window_title(self):
+        """Обновляет заголовок окна в зависимости от текущего режима."""
+        if self._title_mode == 'idle':
+            title = self.translator.tr("main_window_title")
+        elif self._title_mode == 'video':
+            title = self.translator.tr("video_recording_title")
+        elif self._title_mode == 'screen':
+            title = self.translator.tr("screen_capture_title")
+        elif self._title_mode == 'finalize_video':
+            title = self.translator.tr("video_finalize_title")
+        elif self._title_mode == 'finalize_screen':
+            title = self.translator.tr("screen_finalize_title")
+        else:
+            title = self.translator.tr("main_window_title")
+        self.setWindowTitle(title)
 
     # =========================================================
     # 🎬 ВИДЕО СЕССИЯ (встраивается в MainWindow)
@@ -247,6 +286,8 @@ class MainWindow(QMainWindow):
 
         self.set_screen(session)
         self.setFixedSize(430, 80)  # Размер под виджет
+        self._title_mode = 'video'
+        self._update_window_title()
 
     # =========================================================
     # 🖥️ SCREEN СЕССИЯ (встраивается в MainWindow)
@@ -276,6 +317,9 @@ class MainWindow(QMainWindow):
 
         keep_window_inside_screen(self)
 
+        self._title_mode = 'screen'
+        self._update_window_title()
+
     # =========================================================
     # 💾 ФИНАЛИЗАЦИЯ ВИДЕО (встраивается в MainWindow)
     # =========================================================
@@ -291,8 +335,10 @@ class MainWindow(QMainWindow):
         self.set_screen(finalize)
         self.setFixedSize(480, 330)  # Размер под виджет
 
-        # 🆕 Убеждаемся, что окно не вылезает за пределы экрана
+        # Убеждаемся, что окно не вылезает за пределы экрана
         keep_window_inside_screen(self)
+        self._title_mode = 'finalize_video'
+        self._update_window_title()
 
     # =========================================================
     # 💾 ФИНАЛИЗАЦИЯ SCREEN (встраивается в MainWindow)
@@ -310,19 +356,50 @@ class MainWindow(QMainWindow):
         self.setFixedSize(480, 370)  # Размер под виджет
 
         keep_window_inside_screen(self, margin=20)
-
+        self._title_mode = 'finalize_screen'
+        self._update_window_title()
 
     def closeEvent(self, event):
-        """Перехватываем закрытие окна"""
-        logger.debug("вызван closeEvent. Текущая сессия завершена")
-        
-        # Проверяем через controller
-        if self.controller.has_active_session_data():
-            translator = self.controller.get_translator()
-            
+        """Перехватываем закрытие окна."""
+        logger.debug("вызван closeEvent")
+
+        # Редактор открыт — IDLE прячется
+        if self._editor_visible:
+            logger.debug("Редактор открыт → IDLE скрывается")
+            self.hide()
+            event.ignore()
+            return
+
+        # Идёт запись — остановить и открыть редактор с файлом
+        if self.controller.is_recording():
             msg_box = QMessageBox(self)
             msg_box.setIcon(QMessageBox.Warning)
-            
+            msg_box.setWindowTitle("Остановить запись?")
+            msg_box.setText(
+                "Запись будет остановлена.\n"
+                "Файл сохранится и откроется в редакторе."
+            )
+            msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg_box.button(QMessageBox.Yes).setText("Остановить")
+            msg_box.button(QMessageBox.No).setText("Продолжить")
+            msg_box.setDefaultButton(QMessageBox.No)
+
+            result = msg_box.exec()
+            if result == QMessageBox.Yes:
+                logger.debug("Останавливаем запись → редактор откроется автоматически")
+                self.controller.stop_recording()
+                # Дальше: stop_recording → REVIEW → _enter_review →
+                # move_to_drafts → open_editor_requested → редактор откроется
+
+            event.ignore()
+            return
+
+        # Незавершённая сессия без активной записи
+        if self.controller.has_active_session_data():
+            translator = self.controller.get_translator()
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Warning)
+
             if translator:
                 msg_box.setWindowTitle(translator.tr("confirm_close_title"))
                 msg_box.setText(translator.tr("confirm_close_message"))
@@ -335,36 +412,22 @@ class MainWindow(QMainWindow):
                 msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
                 msg_box.button(QMessageBox.Yes).setText("Да, удалить")
                 msg_box.button(QMessageBox.No).setText("Нет, остаться")
-            
+
             msg_box.setDefaultButton(QMessageBox.No)
-            
             result = msg_box.exec()
-            
+
             if result == QMessageBox.Yes:
-                logger.debug("Удаляем сессию и закрываемся")
-
-                # Если идет запись - сначала останавливаем
-                if self.controller.is_recording():
-                    logger.debug("Останавливаем запись...")
-                    self.controller.stop_recording()
-
                 self.controller.discard_session()
                 event.accept()
             else:
-                logger.debug("Закрытие отменено")
                 event.ignore()
-        else:
-            # Нет сессии - просто закрываемся
-            event.accept()
+            return
 
-    
-
+        event.accept()
 class AppSettingsDialog(SettingsDialog):
     def __init__(self, parent, controller):
         logger.debug(f"AppSettingsDialog.__init__ - controller type: {type(controller)}")
-        
         SettingsDialog.__init__(self, parent, controller, "app_settings")
-        
         logger.debug(f"After SettingsDialog init - self.controller type: {type(self.controller)}")
         
         self.setup_localization(controller)
@@ -383,23 +446,18 @@ class AppSettingsDialog(SettingsDialog):
         self.language_setting = LanguageSetting(self.controller)
         self.text_size_setting = TextSizeSetting(self.controller)
         self.tooltips_setting = TooltipsSetting(self.controller)
-
         self.always_on_top_setting = AlwaysOnTopSetting(self.controller)  # 🆕
-
 
         # ───── добавляем в layout
         self.row_language = SettingRow("", self.language_setting)
         self.row_text_size = SettingRow("", self.text_size_setting)
         self.row_tooltips = SettingRow("", self.tooltips_setting)
-
         self.row_always_on_top = SettingRow("", self.always_on_top_setting)  # 🆕
-
 
         layout.addWidget(self.row_language)
         layout.addWidget(self.row_text_size)
         layout.addWidget(self.row_tooltips)
-
-        layout.addWidget(self.row_always_on_top)  # 🆕
+        layout.addWidget(self.row_always_on_top)
     
     def retranslate_ui(self):
         """Обновляет тексты при смене языка"""
@@ -410,23 +468,21 @@ class AppSettingsDialog(SettingsDialog):
             self.row_language.setText(self.translator.tr("language_setting"))
             self.row_text_size.setText(self.translator.tr("text_size_setting"))
             self.row_tooltips.setText(self.translator.tr("show_tooltips"))
-
             self.row_always_on_top.setText(self.translator.tr("always_on_top"))  # 🆕
     
     def apply_settings(self) -> bool:
         
         old_lang = self.controller.get_language()
         new_lang = self.language_setting.get_value()
-
         logger.debug(f"old_lang: {old_lang}, new_lang: {new_lang}")
-        
         self.controller.set_language(new_lang)
         self.controller.set_text_size(self.text_size_setting.get_value())
         self.controller.set_show_tooltips(self.tooltips_setting.get_value())
-
         self.controller.set_always_on_top(self.always_on_top_setting.get_value())  # 🆕
-        
-        
+
+        # применяем настройку подсказок ко всему приложению немедленно
+        set_tooltips_enabled(self.tooltips_setting.get_value())
+
         # СОХРАНЯЕМ НАСТРОЙКИ
         self.controller.save_settings()
         
@@ -438,5 +494,4 @@ class AppSettingsDialog(SettingsDialog):
             self.translator.set_language(lang_code)
         else:
             logger.debug("Язык не изменился")
-        
         return True

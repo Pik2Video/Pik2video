@@ -4,7 +4,6 @@ src/
     __pycache__/
     pik2video/
         __init__.py
-        app.py
         utils.py
         locale/
             __init__.py
@@ -19,6 +18,13 @@ src/
             video_assembler.py
             video_recorder.py
             __pycache__/
+        app/
+            __init__.py
+            application.py
+            blink_manager.py
+            state_coordinator.py
+            window_manager.py
+            __pycache__/
         __pycache__/
         storage/
             __init__.py
@@ -28,17 +34,41 @@ src/
         gui/
             __init__.py
             base.py
+            blink_style.py
             close_policy.py
+            custom_tooltip.py
             dialogs.py
             ffmpeg_dialog.py
             modal.py
             overlays.py
             panels.py
             preset_window.py
+            progress_dialog.py
             sessions.py
             utils.py
             windows.py
             __pycache__/
+            editor/
+                __init__.py
+                drop_zone.py
+                export_dialog.py
+                export_service.py
+                player.py
+                state.py
+                timeline.py
+                tools_panel.py
+                video_files_panel.py
+                volume.py
+                window.py
+                tools/
+                    __init__.py
+                    bitrate.py
+                    format.py
+                    resolution.py
+                    rotation.py
+                    speed.py
+                    __pycache__/
+                __pycache__/
             components_settings/
                 __init__.py
                 common_settings.py
@@ -65,19 +95,33 @@ src/
             settings_model.py
             state_machine.py
             utils.py
+            managers/
+                __init__.py
+                ffmpeg_manager.py
+                recording_manager.py
+                session_manager.py
+                settings_manager.py
+                state_manager.py
+                __pycache__/
             __pycache__/
         infrastructure/
             ffmpeg/
                 __init__.py
                 ffmpeg_service.py
+                installer.py
                 __pycache__/
             storage/
             system/
                 __init__.py
                 platform_detector.py
+                __pycache__/
             logging/
                 __init__.py
                 logger_setup.py
                 __pycache__/
     data/
         tmp/
+            session_20260926_230250/
+            session_20260913_145642/
+            session_20260909_202312/
+            session_20260927_030030/
