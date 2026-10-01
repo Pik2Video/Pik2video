@@ -1,4 +1,4 @@
-# src/pik2video/gui/components_settings/global_settings.py
+# src/pik2video/gui/widgets/global_settings.py
 
 
 from PySide6.QtWidgets import QComboBox, QSpinBox, QCheckBox

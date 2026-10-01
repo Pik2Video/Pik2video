@@ -4,13 +4,13 @@ from PySide6.QtWidgets import QWidget, QLabel, QApplication, QHBoxLayout, QVBoxL
 from PySide6.QtCore import Qt, QTimer, QEvent, Signal
 from PySide6.QtGui import QResizeEvent, QCloseEvent
 
-from .components_settings.screen_settings import CapturePerMinuteInput, CleanSpinBox
-from .components_settings.setting_row import SettingRow
-from .components_settings.record_settings import FpsSwitcher
-from .components_settings.common_settings import TimerInput, QualitySwitcher, ExportFilenameInput
+from .widgets.screen_settings import CapturePerMinuteInput, CleanSpinBox
+from .widgets.setting_row import SettingRow
+from .widgets.record_settings import FpsSwitcher
+from .widgets.common_settings import TimerInput, QualitySwitcher, ExportFilenameInput
 
-from .components_settings.finalize_common_settings import  ExportPathInput, VideoFormatInput, ResolutionSelector, BitrateSelector, RotationSelector  # 🆕
-from .components_settings.finalize_screen_settings import PlaybackFpsInput, SpeedPresetSelector
+from .widgets.finalize_common_settings import  ExportPathInput, VideoFormatInput, ResolutionSelector, BitrateSelector, RotationSelector  # 🆕
+from .widgets.finalize_screen_settings import PlaybackFpsInput, SpeedPresetSelector
 
 from src.pik2video.gui.common.dialogs import confirm
 from .common.utils import center_to_parent, fullscreen_geometry, bring_window_to_front, keep_window_inside_screen

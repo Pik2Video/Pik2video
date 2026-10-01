@@ -1,4 +1,4 @@
-# src/pik2video/gui/components_settings/record_settings.py
+# src/pik2video/gui/widgets/record_settings.py
 
 
 from PySide6.QtWidgets import QWidget, QLabel, QPushButton, QHBoxLayout

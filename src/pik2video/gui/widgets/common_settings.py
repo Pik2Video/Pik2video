@@ -1,4 +1,4 @@
-# src/pik2video/gui/components_settings/common_settings.py
+# src/pik2video/gui/widgets/common_settings.py
 
 from PySide6.QtWidgets import QWidget, QLabel, QPushButton, QHBoxLayout, QSpinBox, QSizePolicy, QLineEdit, QApplication
 from PySide6.QtCore import Qt, QEvent, Signal, QTimer

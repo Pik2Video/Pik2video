@@ -1,4 +1,4 @@
-# src/pik2video/gui/components_settings/finalize_screen_settings.py
+# src/pik2video/gui/widgets/finalize_screen_settings.py
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QSpinBox, QPushButton, QLabel
 from PySide6.QtCore import Qt, Signal

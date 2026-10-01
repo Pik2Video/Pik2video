@@ -7,8 +7,8 @@ from PySide6.QtWidgets import (
 
 from PySide6.QtCore import Qt, Signal, QEvent
 
-from .components_settings.setting_row import SettingRow
-from .components_settings.global_settings import (
+from .widgets.setting_row import SettingRow
+from .widgets.global_settings import (
     LanguageSetting,
     TextSizeSetting,
     TooltipsSetting,

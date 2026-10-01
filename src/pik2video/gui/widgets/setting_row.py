@@ -1,4 +1,4 @@
-# src/pik2video/gui/components_settings/setting_row.py
+# src/pik2video/gui/widgets/setting_row.py
 
 from PySide6.QtWidgets import QWidget, QLabel, QHBoxLayout, QSpacerItem, QSizePolicy
 
