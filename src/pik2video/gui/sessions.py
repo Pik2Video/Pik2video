@@ -12,9 +12,9 @@ from .components_settings.common_settings import TimerInput, QualitySwitcher, Ex
 from .components_settings.finalize_common_settings import  ExportPathInput, VideoFormatInput, ResolutionSelector, BitrateSelector, RotationSelector  # 🆕
 from .components_settings.finalize_screen_settings import PlaybackFpsInput, SpeedPresetSelector
 
-from src.pik2video.gui.dialogs import confirm
-from .utils import center_to_parent, fullscreen_geometry, bring_window_to_front, keep_window_inside_screen
-from .base import SettingsDialog, FinalizeWidget
+from src.pik2video.gui.common.dialogs import confirm
+from .common.utils import center_to_parent, fullscreen_geometry, bring_window_to_front, keep_window_inside_screen
+from .common.base import SettingsDialog, FinalizeWidget
 from .overlays import CoordinateOverlay
 from .panels import CapturePanel
 

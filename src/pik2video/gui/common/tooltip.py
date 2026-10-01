@@ -1,4 +1,4 @@
-# src/pik2video/gui/custom_tooltip.py
+# src/pik2video/gui/common/tooltip.py
 
 from PySide6.QtWidgets import QLabel, QApplication, QPushButton
 from PySide6.QtCore import Qt, QTimer, QPoint

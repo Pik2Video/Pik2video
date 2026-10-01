@@ -15,14 +15,14 @@ from .components_settings.global_settings import (
     AlwaysOnTopSetting, # импорт нового виджета
 )
 
-from .utils import center_to_parent, keep_window_inside_screen
-from .base import SettingsDialog
+from .common.utils import center_to_parent, keep_window_inside_screen
+from .common.base import SettingsDialog
 
 from .sessions import VideoCaptureSession, ScreenCaptureSession
 from .sessions import VideoFinalizeWidget, ScreenFinalizeWidget
 
 # импортируем кнопку с постоянной всплывающей подсказкой
-from .custom_tooltip import TooltipButton, set_tooltips_enabled
+from .common.tooltip import TooltipButton, set_tooltips_enabled
 
 logger = logging.getLogger(__name__)
 

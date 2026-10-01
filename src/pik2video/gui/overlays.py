@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QWidget, QRubberBand
 from PySide6.QtCore import Qt, QRect, QTimer, Signal
 from PySide6.QtGui import QPainter, QColor, QPen, QFont
 
-from src.pik2video.gui.blink_style import (
+from src.pik2video.gui.common.blink_style import (
     OVERLAY_ALPHA_DIM,
     OVERLAY_ALPHA_BRIGHT,
     lerp_alpha,

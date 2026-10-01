@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QPoint, QUrl, Signal
 from PySide6.QtGui import QCloseEvent
 
+
 from .state import EditorState
 from .drop_zone import DropZone
 from .video_files_panel import VideoFilesPanel
@@ -451,7 +452,7 @@ class EditorWindow(QMainWindow):
 
     def _on_video_delete_requested(self):
         """Удаление активного видео с подтверждением."""
-        from src.pik2video.gui.dialogs import confirm
+        from src.pik2video.gui.common.dialogs import confirm
 
         if not self.state.has_videos():
             return
@@ -466,7 +467,7 @@ class EditorWindow(QMainWindow):
 
     def _on_audio_delete_requested(self):
         """Удаление аудио с подтверждением."""
-        from src.pik2video.gui.dialogs import confirm
+        from src.pik2video.gui.common.dialogs import confirm
 
         if not self.state.has_audio():
             return
@@ -507,7 +508,7 @@ class EditorWindow(QMainWindow):
 
     def _on_clear_clicked(self):
         """Сбросить загруженные файлы с подтверждением."""
-        from src.pik2video.gui.dialogs import confirm
+        from src.pik2video.gui.common.dialogs import confirm
 
         if not (self.state.has_videos() or self.state.has_audio()):
             return
@@ -724,7 +725,7 @@ class EditorWindow(QMainWindow):
         # 1. Экспорт
         if self.export_service.is_running():
             if self._export_dialog and not self._export_dialog._is_done:
-                from src.pik2video.gui.dialogs import confirm
+                from src.pik2video.gui.common.dialogs import confirm
                 if not confirm(
                     self,
                     "Идёт экспорт видео.\n\nПрервать экспорт и закрыть редактор?"

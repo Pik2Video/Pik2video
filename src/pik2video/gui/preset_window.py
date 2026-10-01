@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QL
 from PySide6.QtCore import Qt, Signal, QTimer, QSize
 from PySide6.QtGui import QGuiApplication
 
-from src.pik2video.gui.blink_style import (
+from src.pik2video.gui.common.blink_style import (
     PRESET_BG_DIM,
     PRESET_BG_BRIGHT,
     PRESET_BORDER_DIM,
@@ -10,7 +10,7 @@ from src.pik2video.gui.blink_style import (
     lerp_color_hex,
 )
 
-from src.pik2video.gui.custom_tooltip import TooltipButton
+from src.pik2video.gui.common.tooltip import TooltipButton
 
 class PresetWindow(QWidget):
     """

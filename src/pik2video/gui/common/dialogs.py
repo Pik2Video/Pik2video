@@ -1,4 +1,4 @@
-# src/pik2video/gui/dialogs.py
+# src/pik2video/gui/common/dialogs.py
 
 
 from PySide6.QtWidgets import QMessageBox

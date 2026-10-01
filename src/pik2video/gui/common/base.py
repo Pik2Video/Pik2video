@@ -1,11 +1,11 @@
-# src/pik2video/gui/base.py
+# src/pik2video/gui/common/base.py
 
 import logging
 
 from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QSizePolicy, QLabel
 from PySide6.QtCore import Qt, QSize, QEvent, Signal, QObject
 from PySide6.QtGui import QCloseEvent
-from src.pik2video.gui.dialogs import confirm
+from .dialogs import confirm
 from .utils import center_to_parent, keep_window_inside_screen
 
 logger = logging.getLogger(__name__)

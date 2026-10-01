@@ -7,14 +7,13 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-from src.pik2video.gui.blink_style import (
+from src.pik2video.gui.common.blink_style import (
     LABEL_ALPHA_DIM,
     LABEL_ALPHA_BRIGHT,
     lerp_alpha,
 )
 
-# кнопка с постоянной всплывающей подсказкой
-from src.pik2video.gui.custom_tooltip import TooltipButton
+from src.pik2video.gui.common.tooltip import TooltipButton
 
 
 class CapturePanel(QWidget):

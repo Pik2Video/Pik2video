@@ -1,4 +1,4 @@
-# src/pik2video/gui/close_policy.py
+# src/pik2video/gui/common/close_policy.py
 
 from enum import Enum
 

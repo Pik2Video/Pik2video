@@ -1,4 +1,4 @@
-# src/pik2video/gui/utils.py
+# src/pik2video/gui/common/utils.py
 
 from PySide6.QtCore import Qt, QPoint, QRect
 from PySide6.QtWidgets import QApplication, QWidget

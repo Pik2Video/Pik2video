@@ -23,7 +23,7 @@ from PySide6.QtCore import QObject, Qt, Slot
 from src.pik2video.application.session_types import SessionType
 from src.pik2video.application.state_machine import AppState
 from src.pik2video.gui.preset_window import PresetWindow
-from src.pik2video.gui.utils import bring_window_to_front
+from src.pik2video.gui.common.utils import bring_window_to_front
 from src.pik2video.utils import format_size, format_time
 
 from .window_manager import WindowManager

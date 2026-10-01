@@ -1,4 +1,5 @@
-# src/pik2video/gui/blink_style.py
+# src/pik2video/gui/common/blink_style.py
+
 """
 Единый центр стиля мигания.
 

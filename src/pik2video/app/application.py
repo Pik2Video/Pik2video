@@ -18,10 +18,10 @@ from PySide6.QtCore import Qt, QObject, QEvent
 from src.pik2video.application.controller import AppController
 from src.pik2video.gui.windows import MainWindow
 from src.pik2video.gui.ffmpeg_dialog import FFmpegMissingDialog
-from src.pik2video.gui.utils import bottom_right_position
+from src.pik2video.gui.common.utils import bottom_right_position
 
 # импортируем управление подсказками
-from src.pik2video.gui.custom_tooltip import set_tooltips_enabled, is_tooltips_enabled
+from src.pik2video.gui.common.tooltip import set_tooltips_enabled, is_tooltips_enabled
 
 
 from .blink_manager import BlinkManager
