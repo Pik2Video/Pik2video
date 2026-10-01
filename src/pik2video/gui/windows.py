@@ -18,8 +18,8 @@ from .widgets.global_settings import (
 from .common.utils import center_to_parent, keep_window_inside_screen
 from .common.base import SettingsDialog
 
-from .sessions import VideoCaptureSession, ScreenCaptureSession
-from .sessions import VideoFinalizeWidget, ScreenFinalizeWidget
+from .capture.sessions import VideoCaptureSession, ScreenCaptureSession
+from .capture.sessions import VideoFinalizeWidget, ScreenFinalizeWidget
 
 # импортируем кнопку с постоянной всплывающей подсказкой
 from .common.tooltip import TooltipButton, set_tooltips_enabled
@@ -266,7 +266,7 @@ class MainWindow(QMainWindow):
     # =========================================================
     def show_video_session(self, controller):
         """Показать виджет видео записи внутри MainWindow"""
-        from src.pik2video.gui.sessions import VideoCaptureSession
+        from src.pik2video.gui.capture.sessions import VideoCaptureSession
 
         session = VideoCaptureSession(controller)
         session.back_requested.connect(controller.cancel_session)
@@ -294,7 +294,7 @@ class MainWindow(QMainWindow):
     # =========================================================
     def show_screen_session(self, controller):
         """Показать виджет screen захвата внутри MainWindow"""
-        from src.pik2video.gui.sessions import ScreenCaptureSession
+        from src.pik2video.gui.capture.sessions import ScreenCaptureSession
 
         session = ScreenCaptureSession(controller)
         session.back_requested.connect(controller.cancel_session)
@@ -325,7 +325,7 @@ class MainWindow(QMainWindow):
     # =========================================================
     def show_video_finalize(self, controller):
         """Показать виджет финализации видео внутри MainWindow"""
-        from src.pik2video.gui.sessions import VideoFinalizeWidget
+        from src.pik2video.gui.capture.sessions import VideoFinalizeWidget
         
         finalize = VideoFinalizeWidget(self, controller)
         finalize.finalize_requested.connect(controller.finalize_session)
@@ -345,7 +345,7 @@ class MainWindow(QMainWindow):
     # =========================================================
     def show_screen_finalize(self, controller):
         """Показать виджет финализации screen захвата внутри MainWindow"""
-        from src.pik2video.gui.sessions import ScreenFinalizeWidget
+        from src.pik2video.gui.capture.sessions import ScreenFinalizeWidget
         
         finalize = ScreenFinalizeWidget(self, controller)
         finalize.finalize_requested.connect(controller.finalize_session)

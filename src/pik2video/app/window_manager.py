@@ -16,8 +16,8 @@ from typing import Optional
 from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QApplication
 
-from src.pik2video.gui.overlays import CoordinateOverlay
-from src.pik2video.gui.preset_window import PresetWindow
+from src.pik2video.gui.capture.overlays import CoordinateOverlay
+from src.pik2video.gui.capture.preset_window import PresetWindow
 from src.pik2video.gui.common.utils import keep_window_inside_screen, bring_window_to_front
 
 logger = logging.getLogger(__name__)

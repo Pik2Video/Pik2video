@@ -1,20 +1,20 @@
-# src/pik2video/gui/sessions.py
+# src/pik2video/gui/capture/sessions.py
 
 from PySide6.QtWidgets import QWidget, QLabel, QApplication, QHBoxLayout, QVBoxLayout, QSpinBox
 from PySide6.QtCore import Qt, QTimer, QEvent, Signal
 from PySide6.QtGui import QResizeEvent, QCloseEvent
 
-from .widgets.screen_settings import CapturePerMinuteInput, CleanSpinBox
-from .widgets.setting_row import SettingRow
-from .widgets.record_settings import FpsSwitcher
-from .widgets.common_settings import TimerInput, QualitySwitcher, ExportFilenameInput
+from ..widgets.screen_settings import CapturePerMinuteInput, CleanSpinBox
+from ..widgets.setting_row import SettingRow
+from ..widgets.record_settings import FpsSwitcher
+from ..widgets.common_settings import TimerInput, QualitySwitcher, ExportFilenameInput
 
-from .widgets.finalize_common_settings import  ExportPathInput, VideoFormatInput, ResolutionSelector, BitrateSelector, RotationSelector  # 🆕
-from .widgets.finalize_screen_settings import PlaybackFpsInput, SpeedPresetSelector
+from ..widgets.finalize_common_settings import  ExportPathInput, VideoFormatInput, ResolutionSelector, BitrateSelector, RotationSelector  # 🆕
+from ..widgets.finalize_screen_settings import PlaybackFpsInput, SpeedPresetSelector
 
 from src.pik2video.gui.common.dialogs import confirm
-from .common.utils import center_to_parent, fullscreen_geometry, bring_window_to_front, keep_window_inside_screen
-from .common.base import SettingsDialog, FinalizeWidget
+from ..common.utils import center_to_parent, fullscreen_geometry, bring_window_to_front, keep_window_inside_screen
+from ..common.base import SettingsDialog, FinalizeWidget
 from .overlays import CoordinateOverlay
 from .panels import CapturePanel
 

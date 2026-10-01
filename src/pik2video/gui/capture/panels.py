@@ -1,4 +1,4 @@
-# src/pik2video/gui/panels.py
+# src/pik2video/gui/capture/panels.py
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,

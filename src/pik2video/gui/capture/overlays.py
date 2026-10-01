@@ -1,4 +1,4 @@
-# src/pik2video/gui/overlays.py
+# src/pik2video/gui/capture/overlays.py
 
 import logging
 
