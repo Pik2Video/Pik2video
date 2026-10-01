@@ -81,7 +81,10 @@ class Zone(QFrame):
 
 
 class EditorWindow(QMainWindow):
-    record_requested = Signal()
+    record_video_requested = Signal()
+    record_screen_requested = Signal()
+    record_audio_requested = Signal()
+    settings_requested = Signal()
     closed = Signal()
 
     def __init__(self, controller=None, parent=None):
@@ -126,9 +129,8 @@ class EditorWindow(QMainWindow):
         self.resize(width, height)
 
 
-
     def _build_top_bar(self) -> QWidget:
-        """Верхняя полоска с кнопками."""
+        """Верхняя полоска: [⚙️] слева, [⚫ Запись + выезжающее меню] справа."""
         bar = QWidget()
         bar.setFixedHeight(TOP_BAR_HEIGHT)
         bar.setStyleSheet("""
@@ -143,8 +145,73 @@ class EditorWindow(QMainWindow):
         layout.setContentsMargins(4, 2, 4, 2)
         layout.setSpacing(4)
 
+        # ── Слева: глобальные настройки ──
+        self.btn_settings = QPushButton("⚙️")
+        self.btn_settings.setFixedSize(28, 24)
+        self.btn_settings.setStyleSheet("""
+            QPushButton {
+                background-color: #3a3a3a;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #e0e0e0;
+                font-size: 13px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:pressed { background-color: #2a2a2a; }
+        """)
+        self.btn_settings.clicked.connect(self.settings_requested.emit)
+        layout.addWidget(self.btn_settings)
+
+        layout.addStretch()
+
+        # ── Справа: панель с выезжающими кнопками ──
+        self.record_menu = QWidget()
+        self.record_menu.setStyleSheet("background: transparent; border: none;")
+        menu_layout = QHBoxLayout(self.record_menu)
+        menu_layout.setContentsMargins(0, 0, 0, 0)
+        menu_layout.setSpacing(4)
+
+        btn_style = """
+            QPushButton {
+                background-color: #3a3a3a;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #e0e0e0;
+                padding: 2px 10px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:pressed { background-color: #2a2a2a; }
+        """
+
+        self.btn_rec_video = QPushButton("запись видео")
+        self.btn_rec_video.setFixedHeight(24)
+        self.btn_rec_video.setStyleSheet(btn_style)
+        self.btn_rec_video.clicked.connect(self.record_video_requested.emit)
+
+        self.btn_rec_screen = QPushButton("скрин запись")
+        self.btn_rec_screen.setFixedHeight(24)
+        self.btn_rec_screen.setStyleSheet(btn_style)
+        self.btn_rec_screen.clicked.connect(self.record_screen_requested.emit)
+
+        self.btn_rec_audio = QPushButton("запись звука")
+        self.btn_rec_audio.setFixedHeight(24)
+        self.btn_rec_audio.setStyleSheet(btn_style)
+        self.btn_rec_audio.clicked.connect(self.record_audio_requested.emit)
+
+        menu_layout.addWidget(self.btn_rec_video)
+        menu_layout.addWidget(self.btn_rec_screen)
+        menu_layout.addWidget(self.btn_rec_audio)
+
+        # Меню скрыто по умолчанию
+        self.record_menu.setVisible(False)
+
+        layout.addWidget(self.record_menu)
+
+        # ── Кнопка «Запись» — открывает/закрывает меню ──
         self.btn_record = QPushButton("⚫  Запись")
         self.btn_record.setFixedHeight(24)
+        self.btn_record.setCheckable(True)
         self.btn_record.setStyleSheet("""
             QPushButton {
                 background-color: #3a3a3a;
@@ -153,20 +220,21 @@ class EditorWindow(QMainWindow):
                 color: #e0e0e0;
                 padding: 2px 12px;
             }
-            QPushButton:hover {
-                background-color: #4a4a4a;
-            }
-            QPushButton:pressed {
-                background-color: #2a2a2a;
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:pressed { background-color: #2a2a2a; }
+            QPushButton:checked {
+                background-color: #5a5a5a;
+                border-color: #888;
             }
         """)
-        self.btn_record.clicked.connect(self.record_requested.emit)
-
+        self.btn_record.toggled.connect(self._on_record_toggled)
         layout.addWidget(self.btn_record)
-        layout.addStretch()
 
         return bar
 
+    def _on_record_toggled(self, checked: bool):
+        """Показать/скрыть выезжающее меню с кнопками записи."""
+        self.record_menu.setVisible(checked)
 
     def _build_drop_area(self) -> QWidget:
         """Зона 4: колонка из двух областей — видео (2/3) и аудио (1/3)."""

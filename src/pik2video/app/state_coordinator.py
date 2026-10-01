@@ -68,11 +68,11 @@ class StateCoordinator(QObject):
 
         # ── IDLE ──
         if state == AppState.IDLE:
-            # Если редактор открыт — IDLE не показываем и не активируем
-            if getattr(self.main_window, "_editor_visible", False):
-                logger.debug("IDLE: редактор открыт → IDLE остаётся скрытым")
-                return
+            # Всегда пересоздаём IDLE-экран, но показываем окно только если редактор скрыт
             self.main_window.show_idle_screen()
+            if getattr(self.main_window, "_editor_visible", False):
+                logger.debug("IDLE: редактор открыт → IDLE обновлён, но остаётся скрытым")
+                return
             self.main_window.activateWindow()
             bring_window_to_front(self.main_window)
             return

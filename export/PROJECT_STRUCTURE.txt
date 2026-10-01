@@ -10,14 +10,6 @@ src/
             languages.py
             translator.py
             __pycache__/
-        core/
-            __init__.py
-            ffmpeg_video_recorder.py
-            frame_capturer.py
-            utils.py
-            video_assembler.py
-            video_recorder.py
-            __pycache__/
         app/
             __init__.py
             application.py
@@ -29,30 +21,38 @@ src/
         storage/
             __init__.py
             session_storage.py
-            utils.py
             __pycache__/
         gui/
             __init__.py
-            base.py
-            blink_style.py
-            close_policy.py
-            custom_tooltip.py
-            dialogs.py
-            ffmpeg_dialog.py
-            modal.py
-            overlays.py
-            panels.py
-            preset_window.py
-            progress_dialog.py
-            sessions.py
-            utils.py
-            windows.py
+            capture/
+                __init__.py
+                overlays.py
+                panels.py
+                preset_window.py
+                sessions.py
+                __pycache__/
             __pycache__/
+            common/
+                __init__.py
+                base.py
+                blink_style.py
+                close_policy.py
+                dialogs.py
+                tooltip.py
+                utils.py
+                __pycache__/
+            windows/
+                __init__.py
+                ffmpeg_missing.py
+                main.py
+                progress.py
+                __pycache__/
             editor/
                 __init__.py
                 drop_zone.py
                 export_dialog.py
                 export_service.py
+                frame_preview.py
                 player.py
                 state.py
                 timeline.py
@@ -69,23 +69,18 @@ src/
                     speed.py
                     __pycache__/
                 __pycache__/
-            components_settings/
+            widgets/
                 __init__.py
                 common_settings.py
                 finalize_common_settings.py
                 finalize_screen_settings.py
-                finalize_video_settings.py
                 global_settings.py
                 record_settings.py
                 screen_settings.py
                 setting_row.py
                 __pycache__/
-                widgets/
-                    __init__.py
-                    clean_spinbox.py
-                    premium_spinbox.py
-                    setting_row.py
-                    timer_input.py
+            components_settings/
+                __pycache__/
         application/
             __init__.py
             controller.py
@@ -94,7 +89,6 @@ src/
             session_types.py
             settings_model.py
             state_machine.py
-            utils.py
             managers/
                 __init__.py
                 ffmpeg_manager.py
@@ -120,6 +114,7 @@ src/
                 logger_setup.py
                 __pycache__/
     data/
+        drafts/
         tmp/
             session_20260926_230250/
             session_20260913_145642/

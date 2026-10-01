@@ -134,10 +134,14 @@ class MainWindow(QMainWindow):
         keep_window_inside_screen(self, margin=20)
 
     def set_editor_visible(self, visible: bool):
-        """Установить флаг «редактор открыт» и обновить кнопку."""
+        """Установить флаг «редактор открыт» и обновить кнопку (если она существует)."""
         self._editor_visible = visible
-        if hasattr(self, 'btn_editor'):
-            self.btn_editor.setEnabled(not visible)
+        try:
+            if hasattr(self, 'btn_editor') and self.btn_editor is not None:
+                self.btn_editor.setEnabled(not visible)
+        except RuntimeError:
+            # Кнопка уже удалена — это нормально, если IDLE был заменён другим экраном
+            pass
 
     # =========================================================
     # 🟢 IDLE ЭКРАН (главный)
@@ -175,6 +179,7 @@ class MainWindow(QMainWindow):
 
         self.btn_editor = QPushButton("🔏          редактор")
         self.btn_editor.setFixedSize(W, 22)
+        self.btn_editor.setEnabled(not self._editor_visible)
         self.btn_editor.clicked.connect(self.editor_requested.emit)
 
         self.btn_record = QPushButton("запись видео")

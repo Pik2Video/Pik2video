@@ -96,10 +96,11 @@ class Application:
             self.main_window.setWindowFlags(
                 self.main_window.windowFlags() | Qt.WindowStaysOnTopHint
             )
-            self.main_window.show()
 
         self._position_main_window()
-        self.main_window.show()
+
+        # При запуске сразу открываем редактор (IDLE остаётся скрытым)
+        self._open_editor()
 
     # ---------------- Positioning ----------------
 
@@ -122,7 +123,10 @@ class Application:
 
         if self._editor_window is None:
             self._editor_window = EditorWindow(controller=self.controller)
-            self._editor_window.record_requested.connect(self._on_editor_record_requested)
+            self._editor_window.record_video_requested.connect(self._on_start_video)
+            self._editor_window.record_screen_requested.connect(self._on_start_screen)
+            self._editor_window.record_audio_requested.connect(self._on_start_audio)
+            self._editor_window.settings_requested.connect(self._on_open_settings)
             self._editor_window.closed.connect(self._on_editor_closed)
 
         self.main_window.set_editor_visible(True)
@@ -131,11 +135,32 @@ class Application:
         self._editor_window.raise_()
         self._editor_window.activateWindow()
 
-    def _on_editor_record_requested(self):
-        """Кнопка «Запись» в редакторе → показать IDLE поверх."""
+    def _on_start_video(self):
+        """Кнопка «запись видео» в редакторе → показать IDLE + начать подготовку."""
         self.main_window.show()
         self.main_window.raise_()
         self.main_window.activateWindow()
+        self.controller.prepare_video()
+
+    def _on_start_screen(self):
+        """Кнопка «скрин запись» в редакторе → показать IDLE + начать подготовку."""
+        self.main_window.show()
+        self.main_window.raise_()
+        self.main_window.activateWindow()
+        self.controller.prepare_screen()
+
+    def _on_start_audio(self):
+        """Кнопка «запись звука» — пока заглушка."""
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.information(
+            self._editor_window,
+            "Запись звука",
+            "Функция появится в следующих версиях."
+        )
+
+    def _on_open_settings(self):
+        """Кнопка ⚙️ в редакторе → открыть глобальные настройки."""
+        self.window_manager.open_app_settings()
 
     def _on_editor_closed(self):
         """Редактор скрыт → показать IDLE, разблокировать кнопку."""
@@ -149,7 +174,10 @@ class Application:
 
         if self._editor_window is None:
             self._editor_window = EditorWindow(controller=self.controller)
-            self._editor_window.record_requested.connect(self._on_editor_record_requested)
+            self._editor_window.record_video_requested.connect(self._on_start_video)
+            self._editor_window.record_screen_requested.connect(self._on_start_screen)
+            self._editor_window.record_audio_requested.connect(self._on_start_audio)
+            self._editor_window.settings_requested.connect(self._on_open_settings)
             self._editor_window.closed.connect(self._on_editor_closed)
 
         self._editor_window.load_file(path)
@@ -159,17 +187,6 @@ class Application:
         self._editor_window.raise_()
         self._editor_window.activateWindow()
 
-    def _open_editor_with_file(self, path: str):
-        """Открыть редактор и загрузить в него файл."""
-        from src.pik2video.gui.editor.window import EditorWindow
-
-        if self._editor_window is None:
-            self._editor_window = EditorWindow(controller=self.controller)
-
-        self._editor_window.load_file(path)
-        self._editor_window.show()
-        self._editor_window.raise_()
-        self._editor_window.activateWindow()
 
     # ---------------- Run ----------------
 

@@ -57,7 +57,7 @@ class TimelineWidget(QWidget):
 
     def set_duration(self, seconds: float):
         self._duration = max(0.0, seconds)
-        if self._trim_end > self._duration or self._trim_end == 0.0:
+        if self._duration > 0 and self._trim_end > self._duration:
             self._trim_end = self._duration
         self.update()
 
@@ -66,8 +66,8 @@ class TimelineWidget(QWidget):
         self.update()
 
     def set_trim(self, start: float, end: float):
-        self._trim_start = max(0.0, min(start, self._duration))
-        self._trim_end = max(self._trim_start, min(end, self._duration))
+        self._trim_start = max(0.0, start)
+        self._trim_end = max(self._trim_start, end)
         self.update()
 
     def get_trim(self) -> tuple:

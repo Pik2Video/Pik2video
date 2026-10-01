@@ -54,6 +54,7 @@ class PlayerWidget(QWidget):
         self._loop_enabled = False
         self._last_frame = None
         self._keep_frames = True   # кэшировать кадры
+        self._pending_play = False  # идёт seek от кнопки ▶
 
         self._stack = QStackedWidget(self)
 
@@ -368,9 +369,11 @@ class PlayerWidget(QWidget):
             self._player.pause()
             return
 
-        # Если позиция вне диапазона — прыгаем на начало
         pos = self._player.position() / 1000.0
-        if self._trim_end > 0 and (pos < self._trim_start or pos >= self._trim_end):
+        tolerance = 0.05
+
+        if self._trim_end > 0 and (pos < self._trim_start or pos >= self._trim_end - tolerance):
+            self._pending_play = True
             self._player.setPosition(int(self._trim_start * 1000))
 
         self._player.play()
@@ -384,7 +387,14 @@ class PlayerWidget(QWidget):
 
         seconds = ms / 1000.0
 
-        # Достигли конца диапазона трима
+        # Идёт seek от кнопки ▶ — пропускаем проверку конца, пока не достигнем диапазона
+        if self._pending_play:
+            if seconds < self._trim_end - 0.05:
+                self._pending_play = False
+            else:
+                self.position_changed.emit(seconds)
+                return
+
         if (
             self._trim_end > 0
             and seconds >= self._trim_end
