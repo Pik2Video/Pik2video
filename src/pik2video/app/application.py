@@ -16,8 +16,8 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, QObject, QEvent
 
 from src.pik2video.application.controller import AppController
-from src.pik2video.gui.windows import MainWindow
-from src.pik2video.gui.ffmpeg_dialog import FFmpegMissingDialog
+from src.pik2video.gui.windows.main import MainWindow
+from src.pik2video.gui.windows.ffmpeg_missing import FFmpegMissingDialog
 from src.pik2video.gui.common.utils import bottom_right_position
 
 # импортируем управление подсказками

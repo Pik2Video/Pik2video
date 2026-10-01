@@ -70,7 +70,7 @@ class WindowManager(QObject):
     # ---------------- App settings ----------------
 
     def open_app_settings(self):
-        from src.pik2video.gui.windows import AppSettingsDialog
+        from src.pik2video.gui.windows.main import AppSettingsDialog
 
         if self.app_settings_window is None:
             self.app_settings_window = AppSettingsDialog(self.main_window, self.controller)

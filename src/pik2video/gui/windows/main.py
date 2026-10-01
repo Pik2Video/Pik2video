@@ -7,22 +7,22 @@ from PySide6.QtWidgets import (
 
 from PySide6.QtCore import Qt, Signal, QEvent
 
-from .widgets.setting_row import SettingRow
-from .widgets.global_settings import (
+from ..widgets.setting_row import SettingRow
+from ..widgets.global_settings import (
     LanguageSetting,
     TextSizeSetting,
     TooltipsSetting,
     AlwaysOnTopSetting, # импорт нового виджета
 )
 
-from .common.utils import center_to_parent, keep_window_inside_screen
-from .common.base import SettingsDialog
+from ..common.utils import center_to_parent, keep_window_inside_screen
+from ..common.base import SettingsDialog
 
-from .capture.sessions import VideoCaptureSession, ScreenCaptureSession
-from .capture.sessions import VideoFinalizeWidget, ScreenFinalizeWidget
+from ..capture.sessions import VideoCaptureSession, ScreenCaptureSession
+from ..capture.sessions import VideoFinalizeWidget, ScreenFinalizeWidget
 
 # импортируем кнопку с постоянной всплывающей подсказкой
-from .common.tooltip import TooltipButton, set_tooltips_enabled
+from ..common.tooltip import TooltipButton, set_tooltips_enabled
 
 logger = logging.getLogger(__name__)
 

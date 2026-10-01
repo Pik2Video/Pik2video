@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices, QFont
 
-from src.pik2video.gui.progress_dialog import ProgressDialog
+from .progress import ProgressDialog
 
 
 class FFmpegMissingDialog(QDialog):
