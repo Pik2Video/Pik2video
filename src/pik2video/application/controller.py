@@ -258,6 +258,12 @@ class AppController(QObject):
     def set_preset_vertical(self, value):
         self.settings_manager.set_preset_vertical(value)
 
+    def get_auto_hide_editor(self) -> bool:
+        return self.settings_manager.get_auto_hide_editor()
+
+    def set_auto_hide_editor(self, value: bool):
+        self.settings_manager.set_auto_hide_editor(value)
+
     def get_record_fps(self):
         return self.settings_manager.get_record_fps()
 

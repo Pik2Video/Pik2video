@@ -90,6 +90,8 @@ class Application:
         self.main_window.editor_requested.connect(self._open_editor)
         self.controller.open_editor_requested.connect(self._open_editor_with_file)
         self._editor_window = None
+        self._editor_hidden_for_record = False
+        self.controller.state_changed.connect(self._on_state_changed_editor_visibility)
 
         # ── Always on top at startup ──
         if self.controller.get_always_on_top():
@@ -126,7 +128,7 @@ class Application:
             self._editor_window.record_video_requested.connect(self._on_start_video)
             self._editor_window.record_screen_requested.connect(self._on_start_screen)
             self._editor_window.record_audio_requested.connect(self._on_start_audio)
-            self._editor_window.settings_requested.connect(self._on_open_settings)
+            #self._editor_window.settings_requested.connect(self._on_open_settings)
             self._editor_window.closed.connect(self._on_editor_closed)
 
         self.main_window.set_editor_visible(True)
@@ -158,16 +160,50 @@ class Application:
             "Функция появится в следующих версиях."
         )
 
+    def _on_state_changed_editor_visibility(self, state):
+        """Скрыть/показать редактор в зависимости от состояния."""
+        from src.pik2video.application.state_machine import AppState
+
+        # Скрытие — только при реальном переходе в PREPARING
+        if state in (AppState.PREPARING_VIDEO, AppState.PREPARING_SCREEN):
+            if not self.controller.get_auto_hide_editor():
+                return
+            if self._editor_window is None or not self._editor_window.isVisible():
+                return
+            self._editor_window.hide()
+            self._editor_hidden_for_record = True
+            logger.info("Редактор скрыт для записи")
+            return
+
+        # Восстановление — при возврате в IDLE
+        if state == AppState.IDLE:
+            if not self._editor_hidden_for_record:
+                return
+            self._editor_hidden_for_record = False
+            if self._editor_window is not None:
+                self._editor_window.show()
+                self._editor_window.raise_()
+                self._editor_window.activateWindow()
+            logger.info("Редактор восстановлен после записи")
+            return
+
     def _on_open_settings(self):
         """Кнопка ⚙️ в редакторе → открыть глобальные настройки."""
         self.window_manager.open_app_settings()
 
     def _on_editor_closed(self):
-        """Редактор скрыт → показать IDLE, разблокировать кнопку."""
+        """Редактор закрыт. Если окно записи не видно — выходим."""
+        logger.info("Редактор закрыт")
         self.main_window.set_editor_visible(False)
-        self.main_window.show()
-        self.main_window.raise_()
-        self.main_window.activateWindow()
+
+        # Если окно записи открыто — приложение продолжает работу
+        if self.main_window.isVisible():
+            logger.debug("Окно записи видно → приложение продолжает работу")
+            return
+
+        # Больше видимых окон нет — закрываем приложение
+        logger.info("Все окна закрыты — выходим")
+        self.qt_app.quit()
 
     def _open_editor_with_file(self, path: str):
         from src.pik2video.gui.editor.window import EditorWindow
@@ -177,7 +213,7 @@ class Application:
             self._editor_window.record_video_requested.connect(self._on_start_video)
             self._editor_window.record_screen_requested.connect(self._on_start_screen)
             self._editor_window.record_audio_requested.connect(self._on_start_audio)
-            self._editor_window.settings_requested.connect(self._on_open_settings)
+            #self._editor_window.settings_requested.connect(self._on_open_settings)
             self._editor_window.closed.connect(self._on_editor_closed)
 
         self._editor_window.load_file(path)

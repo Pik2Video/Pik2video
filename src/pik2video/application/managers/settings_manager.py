@@ -107,6 +107,13 @@ class SettingsManager(QObject):
         self.settings.global_settings.preset_vertical = value
         logger.debug(f"Preset вертикальный: {value}")
 
+    def get_auto_hide_editor(self) -> bool:
+        return self.settings.global_settings.auto_hide_editor
+
+    def set_auto_hide_editor(self, value: bool):
+        self.settings.global_settings.auto_hide_editor = value
+        logger.debug(f"Auto-hide editor: {value}")
+
     # ---------- Настройки записи видео (Record) ----------
 
     def get_record_fps(self) -> int:

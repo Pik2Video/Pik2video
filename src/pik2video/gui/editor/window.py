@@ -79,12 +79,90 @@ class Zone(QFrame):
         label.setWordWrap(True)
         layout.addWidget(label)
 
+class _DimOverlayWindow(QWidget):
+    """Top-level затемнение поверх редактора (кроме топбара). Клик — сигнал."""
+
+    clicked = Signal()
+
+    def __init__(self):
+        super().__init__(
+            None,
+            Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+
+    def paintEvent(self, event):
+        from PySide6.QtGui import QPainter, QColor
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 140))
+
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+
+
+class _RecordMenuWindow(QWidget):
+    """Top-level окно с кнопками записи."""
+
+    record_video_clicked = Signal()
+    record_screen_clicked = Signal()
+    record_audio_clicked = Signal()
+
+    def __init__(self):
+        super().__init__(
+            None,
+            Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #2a2a2a;
+                border: 1px solid #555;
+                border-radius: 6px;
+            }
+        """)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(4)
+
+        btn_style = """
+            QPushButton {
+                background-color: #3a3a3a;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #e0e0e0;
+                padding: 4px 12px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:pressed { background-color: #2a2a2a; }
+        """
+
+        self.btn_video = QPushButton("запись видео")
+        self.btn_video.setFixedHeight(26)
+        self.btn_video.setStyleSheet(btn_style)
+        self.btn_video.clicked.connect(self.record_video_clicked.emit)
+
+        self.btn_screen = QPushButton("скрин запись")
+        self.btn_screen.setFixedHeight(26)
+        self.btn_screen.setStyleSheet(btn_style)
+        self.btn_screen.clicked.connect(self.record_screen_clicked.emit)
+
+        self.btn_audio = QPushButton("запись звука")
+        self.btn_audio.setFixedHeight(26)
+        self.btn_audio.setStyleSheet(btn_style)
+        self.btn_audio.clicked.connect(self.record_audio_clicked.emit)
+
+        layout.addWidget(self.btn_video)
+        layout.addWidget(self.btn_screen)
+        layout.addWidget(self.btn_audio)
+
 
 class EditorWindow(QMainWindow):
     record_video_requested = Signal()
     record_screen_requested = Signal()
     record_audio_requested = Signal()
-    settings_requested = Signal()
     closed = Signal()
 
     def __init__(self, controller=None, parent=None):
@@ -100,6 +178,15 @@ class EditorWindow(QMainWindow):
 
         self._export_dialog = None
         self._frame_preview = FramePreview()
+
+        # Top-level окна для меню записи
+        self._dim_window = _DimOverlayWindow()
+        self._dim_window.clicked.connect(self._close_record_menu)
+
+        self._menu_window = _RecordMenuWindow()
+        self._menu_window.record_video_clicked.connect(self._on_record_video)
+        self._menu_window.record_screen_clicked.connect(self._on_record_screen)
+        self._menu_window.record_audio_clicked.connect(self._on_record_audio)
 
         self.setWindowTitle("Редактор")
         self.setMinimumSize(1100, 700)
@@ -129,8 +216,9 @@ class EditorWindow(QMainWindow):
         self.resize(width, height)
 
 
+
     def _build_top_bar(self) -> QWidget:
-        """Верхняя полоска: [⚙️] слева, [⚫ Запись + выезжающее меню] справа."""
+        """Верхняя полоска: [⚙️] слева, [⚫ Запись] справа."""
         bar = QWidget()
         bar.setFixedHeight(TOP_BAR_HEIGHT)
         bar.setStyleSheet("""
@@ -145,10 +233,7 @@ class EditorWindow(QMainWindow):
         layout.setContentsMargins(4, 2, 4, 2)
         layout.setSpacing(4)
 
-        # ── Слева: глобальные настройки ──
-        self.btn_settings = QPushButton("⚙️")
-        self.btn_settings.setFixedSize(28, 24)
-        self.btn_settings.setStyleSheet("""
+        btn_toolbar_style = """
             QPushButton {
                 background-color: #3a3a3a;
                 border: 1px solid #555;
@@ -158,58 +243,31 @@ class EditorWindow(QMainWindow):
             }
             QPushButton:hover { background-color: #4a4a4a; }
             QPushButton:pressed { background-color: #2a2a2a; }
-        """)
-        self.btn_settings.clicked.connect(self.settings_requested.emit)
+            QPushButton:checked {
+                background-color: #5a5a5a;
+                border-color: #888;
+            }
+        """
+
+        self.btn_tools = QPushButton("🛠️")
+        self.btn_tools.setFixedSize(28, 24)
+        self.btn_tools.setCheckable(True)
+        self.btn_tools.setChecked(True)
+        self.btn_tools.setStyleSheet(btn_toolbar_style)
+        self.btn_tools.clicked.connect(self._on_tools_clicked)
+        layout.addWidget(self.btn_tools)
+
+        self.btn_settings = QPushButton("⚙️")
+        self.btn_settings.setFixedSize(28, 24)
+        self.btn_settings.setCheckable(True)
+        self.btn_settings.setStyleSheet(btn_toolbar_style)
+        self.btn_settings.clicked.connect(self._on_settings_clicked)
         layout.addWidget(self.btn_settings)
+
 
         layout.addStretch()
 
-        # ── Справа: панель с выезжающими кнопками ──
-        self.record_menu = QWidget()
-        self.record_menu.setStyleSheet("background: transparent; border: none;")
-        menu_layout = QHBoxLayout(self.record_menu)
-        menu_layout.setContentsMargins(0, 0, 0, 0)
-        menu_layout.setSpacing(4)
-
-        btn_style = """
-            QPushButton {
-                background-color: #3a3a3a;
-                border: 1px solid #555;
-                border-radius: 4px;
-                color: #e0e0e0;
-                padding: 2px 10px;
-                font-size: 11px;
-            }
-            QPushButton:hover { background-color: #4a4a4a; }
-            QPushButton:pressed { background-color: #2a2a2a; }
-        """
-
-        self.btn_rec_video = QPushButton("запись видео")
-        self.btn_rec_video.setFixedHeight(24)
-        self.btn_rec_video.setStyleSheet(btn_style)
-        self.btn_rec_video.clicked.connect(self.record_video_requested.emit)
-
-        self.btn_rec_screen = QPushButton("скрин запись")
-        self.btn_rec_screen.setFixedHeight(24)
-        self.btn_rec_screen.setStyleSheet(btn_style)
-        self.btn_rec_screen.clicked.connect(self.record_screen_requested.emit)
-
-        self.btn_rec_audio = QPushButton("запись звука")
-        self.btn_rec_audio.setFixedHeight(24)
-        self.btn_rec_audio.setStyleSheet(btn_style)
-        self.btn_rec_audio.clicked.connect(self.record_audio_requested.emit)
-
-        menu_layout.addWidget(self.btn_rec_video)
-        menu_layout.addWidget(self.btn_rec_screen)
-        menu_layout.addWidget(self.btn_rec_audio)
-
-        # Меню скрыто по умолчанию
-        self.record_menu.setVisible(False)
-
-        layout.addWidget(self.record_menu)
-
-        # ── Кнопка «Запись» — открывает/закрывает меню ──
-        self.btn_record = QPushButton("⚫  Запись")
+        self.btn_record = QPushButton(" ⚫  Запись ")
         self.btn_record.setFixedHeight(24)
         self.btn_record.setCheckable(True)
         self.btn_record.setStyleSheet("""
@@ -232,9 +290,7 @@ class EditorWindow(QMainWindow):
 
         return bar
 
-    def _on_record_toggled(self, checked: bool):
-        """Показать/скрыть выезжающее меню с кнопками записи."""
-        self.record_menu.setVisible(checked)
+    
 
     def _build_drop_area(self) -> QWidget:
         """Зона 4: колонка из двух областей — видео (2/3) и аудио (1/3)."""
@@ -435,7 +491,7 @@ class EditorWindow(QMainWindow):
         middle.setSpacing(GAP)
 
         # 2. Панель функций (слева, во всю высоту)
-        self.tools_panel = ToolsPanel(self.state)
+        self.tools_panel = ToolsPanel(self.state, self.controller)
         self.tools_panel.setFixedWidth(TOOLS_PANEL_WIDTH)
         middle.addWidget(self.tools_panel)
 
@@ -501,6 +557,7 @@ class EditorWindow(QMainWindow):
 
         self.btn_export.setEnabled(self.state.has_videos())
 
+        
 
     def _on_video_dropped(self, path: str):
         """Файл принят в списке видео."""
@@ -788,8 +845,102 @@ class EditorWindow(QMainWindow):
         self._frame_preview.hide_preview()
         self.multiplexer.set_keep_frames(False)
 
+    def _on_tools_clicked(self):
+        self.tools_panel.show_tools()
+        self.btn_tools.setChecked(True)
+        self.btn_settings.setChecked(False)
+
+    def _on_settings_clicked(self):
+        self.tools_panel.show_settings()
+        self.btn_settings.setChecked(True)
+        self.btn_tools.setChecked(False)
+
+    # ── Плавающее меню записи ──
+    def _on_record_toggled(self, checked: bool):
+        if checked:
+            self._open_record_menu()
+        else:
+            self._close_record_menu()
+
+
+    def _open_record_menu(self):
+        """Показать затемнение и меню."""
+        # Геометрия редактора на экране
+        editor_top_left = self.mapToGlobal(QPoint(0, 0))
+        top_bar_h = self.top_bar.height()
+
+        # ── Затемнение: от низа топбара до низа редактора ──
+        self._dim_window.setGeometry(
+            editor_top_left.x(),
+            editor_top_left.y() + top_bar_h,
+            self.width(),
+            self.height() - top_bar_h,
+        )
+        self._dim_window.show()
+
+        # ── Меню: в одну линию с кнопкой «Запись», слева от неё ──
+        self._menu_window.adjustSize()
+        menu_w = self._menu_window.sizeHint().width()
+        menu_h = self._menu_window.sizeHint().height()
+
+        btn_global = self.btn_record.mapToGlobal(QPoint(0, 0))
+        menu_x = btn_global.x() - menu_w - 4
+        menu_y = btn_global.y() + (self.btn_record.height() - menu_h) // 2
+
+        self._menu_window.move(menu_x, menu_y)
+        self._menu_window.show()
+
+        self.btn_settings.setEnabled(False)
+
+    def _close_record_menu(self):
+        """Скрыть затемнение и меню."""
+        self._dim_window.hide()
+        self._menu_window.hide()
+        self.btn_settings.setEnabled(True)
+
+        self.btn_record.blockSignals(True)
+        self.btn_record.setChecked(False)
+        self.btn_record.blockSignals(False)
+    # ── Кнопки меню ──
+
+    def _on_record_video(self):
+        self._close_record_menu()
+        self.record_video_requested.emit()
+
+    def _on_record_screen(self):
+        self._close_record_menu()
+        self.record_screen_requested.emit()
+
+    def _on_record_audio(self):
+        self._close_record_menu()
+        self.record_audio_requested.emit()
+
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._menu_window.isVisible():
+            self._close_record_menu()
+
+    def moveEvent(self, event):
+        super().moveEvent(event)
+        if self._menu_window.isVisible():
+            self._close_record_menu()
+
     def closeEvent(self, event: QCloseEvent):
         """Перед закрытием: остановить всё и удалить окно."""
+
+        # Закрываем top-level окна
+        try:
+            self._dim_window.hide()
+            self._dim_window.deleteLater()
+        except Exception:
+            pass
+        try:
+            self._menu_window.hide()
+            self._menu_window.deleteLater()
+        except Exception:
+            pass
+
         # 1. Экспорт
         if self.export_service.is_running():
             if self._export_dialog and not self._export_dialog._is_done:

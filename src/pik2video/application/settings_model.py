@@ -17,6 +17,7 @@ class AppGlobalSettings:
     # start_delay: int = 0 
     always_on_top: bool = False
     preset_vertical: bool = False  # 🆕 false = горизонтально, true = вертикально
+    auto_hide_editor: bool = False  # 🆕 автоскрытие редактора при старте записи
 
 
 # 2️⃣ ────────────Общие настройки для всех сессий (Record + Screen)────────────
@@ -119,7 +120,8 @@ class SettingsModel:
                 self.global_settings.text_size = gs.get("text_size", 12)
                 self.global_settings.show_tooltips = gs.get("show_tooltips", True)
                 self.global_settings.always_on_top = gs.get("always_on_top", False)
-                self.global_settings.preset_vertical = gs.get("preset_vertical", False)  # 🆕
+                self.global_settings.preset_vertical = gs.get("preset_vertical", False)
+                self.global_settings.auto_hide_editor = gs.get("auto_hide_editor", False)  # 🆕
             
             # Загружаем настройки записи
             if "record" in data:

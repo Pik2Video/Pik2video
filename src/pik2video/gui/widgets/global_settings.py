@@ -1,70 +1,168 @@
 # src/pik2video/gui/widgets/global_settings.py
 
+from PySide6.QtWidgets import QComboBox, QSpinBox, QCheckBox, QPushButton, QMenu
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction
 
-from PySide6.QtWidgets import QComboBox, QSpinBox, QCheckBox
-from PySide6.QtCore import Qt
 
-# ────────────1️⃣ Язык приложения────────────
-class LanguageSetting(QComboBox):
+# ── Константы ──
+
+LANGUAGE_FLAGS = {
+    "Русский": "🇷🇺",
+    "English": "🇺🇸",
+}
+
+TEXT_SIZE_LABELS = {
+    1: "Мелкий",
+    2: "Средний",
+    3: "Крупный",
+}
+
+BTN_WIDTH = 100
+BTN_HEIGHT = 26
+
+
+def _button_style() -> str:
+    return """
+        QPushButton {
+            background-color: #3a3a3a;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 11px;
+            padding: 2px 8px;
+        }
+        QPushButton:hover { background-color: #4a4a4a; }
+        QPushButton::menu-indicator { image: none; }
     """
-    Виджет выбора языка приложения
+
+
+# ── Виджеты ──
+
+class LanguageSetting(QPushButton):
     """
+    Виджет выбора языка — кнопка с флагом, выезжающее меню.
+    """
+
+    language_changed = Signal(str)  # "Русский" / "English"
+
     def __init__(self, controller):
         super().__init__()
-        # Добавляем варианты языков
-        self.addItems(["Русский", "English"]) # Добавляем варианты языков
-        self.setCurrentText(controller.get_language())        # Устанавливаем текущий язык из контроллера
-        self.setFixedWidth(100)        # Фиксированная ширина, чтобы не ломалась строка
+        self._current = controller.get_language()
+
+        self.setFixedSize(BTN_WIDTH, BTN_HEIGHT)
+        self.setFocusPolicy(Qt.NoFocus)
+        self.setStyleSheet(_button_style())
+
+        self._menu = QMenu(self)
+        self._menu.setStyleSheet("""
+            QMenu {
+                background-color: #2a2a2a;
+                border: 1px solid #555;
+                color: #e0e0e0;
+            }
+            QMenu::item { padding: 4px 20px; }
+            QMenu::item:selected { background-color: #3a3a3a; }
+        """)
+
+        for lang_name, flag in LANGUAGE_FLAGS.items():
+            action = QAction(f"{flag}  {lang_name}", self)
+            action.triggered.connect(lambda checked=False, n=lang_name: self._select(n))
+            self._menu.addAction(action)
+
+        self.setMenu(self._menu)
+        self._update_text()
+
+    def _update_text(self):
+        flag = LANGUAGE_FLAGS.get(self._current, "🏳️")
+        self.setText(flag)
+
+    def _select(self, lang_name: str):
+        if lang_name == self._current:
+            return
+        self._current = lang_name
+        self._update_text()
+        self.language_changed.emit(lang_name)
+
+    def get_value(self) -> str:
+        return self._current
 
 
-    def get_value(self):
-        # Возвращает выбранный язык
-        return self.currentText()
-
-
-# ────────────2️⃣ Размер текста────────────
-class TextSizeSetting(QSpinBox):
+class TextSizeSetting(QPushButton):
     """
-    Виджет для выбора размера текста
+    Виджет выбора размера текста — кнопка с названием, выезжающее меню.
     """
+
+    size_changed = Signal(int)  # 1 / 2 / 3
+
     def __init__(self, controller):
         super().__init__()
-        # Ограничиваем диапазон значений
-        self.setRange(1, 3)
-        # Устанавливаем текущее значение из контроллера
-        self.setValue(controller.get_text_size())
-        # Фиксированная ширина, чтобы не ломалась строка
-        self.setFixedWidth(30)
+        self._current = controller.get_text_size()
 
-    def get_value(self):
-        # Возвращает выбранный размер текста
-        return self.value()
+        self.setFixedSize(BTN_WIDTH, BTN_HEIGHT)
+        self.setFocusPolicy(Qt.NoFocus)
+        self.setStyleSheet(_button_style())
+
+        self._menu = QMenu(self)
+        self._menu.setStyleSheet("""
+            QMenu {
+                background-color: #2a2a2a;
+                border: 1px solid #555;
+                color: #e0e0e0;
+            }
+            QMenu::item { padding: 4px 20px; }
+            QMenu::item:selected { background-color: #3a3a3a; }
+        """)
+
+        for size_value, label in TEXT_SIZE_LABELS.items():
+            action = QAction(label, self)
+            action.triggered.connect(lambda checked=False, v=size_value: self._select(v))
+            self._menu.addAction(action)
+
+        self.setMenu(self._menu)
+        self._update_text()
+
+    def _update_text(self):
+        self.setText(TEXT_SIZE_LABELS.get(self._current, "—"))
+
+    def _select(self, value: int):
+        if value == self._current:
+            return
+        self._current = value
+        self._update_text()
+        self.size_changed.emit(value)
+
+    def get_value(self) -> int:
+        return self._current
 
 
-# ────────────3️⃣ Подсказки──────────────────
 class TooltipsSetting(QCheckBox):
-    """
-    Виджет для включения/выключения подсказок
-    """
+    """Включение/выключение подсказок."""
     def __init__(self, controller):
         super().__init__()
-        # Устанавливаем состояние из контроллера
         self.setChecked(controller.get_show_tooltips())
-        # Текст на виджете пустой (его будет описывать SettingRow)
         self.setText("")
 
     def get_value(self):
-        # Возвращает True/False
         return self.isChecked()
 
-# ────────────4️⃣ Всегда в топе────────────
+
 class AlwaysOnTopSetting(QCheckBox):
-    """
-    Виджет для включения/выключения режима "всегда в топе"
-    """
+    """Включение/выключение режима «всегда в топе»."""
     def __init__(self, controller):
         super().__init__()
         self.setChecked(controller.get_always_on_top())
+        self.setText("")
+
+    def get_value(self):
+        return self.isChecked()
+
+
+class AutoHideEditorSetting(QCheckBox):
+    """Автоскрытие редактора при старте записи."""
+    def __init__(self, controller):
+        super().__init__()
+        self.setChecked(controller.get_auto_hide_editor())
         self.setText("")
 
     def get_value(self):

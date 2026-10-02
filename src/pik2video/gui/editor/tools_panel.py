@@ -17,6 +17,9 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+from .global_settings_panel import GlobalSettingsPanel
+
+
 from .tools.format import FormatTool
 from .tools.resolution import ResolutionTool
 from .tools.bitrate import BitrateTool
@@ -34,9 +37,10 @@ LABEL_WIDTH = 70
 class ToolsPanel(QFrame):
     """Левая колонка с инструментами и блоком «Информация»."""
 
-    def __init__(self, state, parent=None):
+    def __init__(self, state, controller, parent=None):
         super().__init__(parent)
         self.state = state
+        self.controller = controller
 
         self.setFrameShape(QFrame.NoFrame)
         self.setStyleSheet("""
@@ -50,7 +54,18 @@ class ToolsPanel(QFrame):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Верх: инструменты ──
+        # ── Стек: страницы «Инструменты» и «Настройки» ──
+        self._stack = QStackedWidget()
+        self._stack.setStyleSheet("background: transparent; border: none;")
+        root.addWidget(self._stack)
+
+        # ── Страница 0: инструменты ──
+        tools_page = QWidget()
+        tools_page.setStyleSheet("background: transparent; border: none;")
+        tools_root = QVBoxLayout(tools_page)
+        tools_root.setContentsMargins(0, 0, 0, 0)
+        tools_root.setSpacing(0)
+
         top = QWidget()
         top.setStyleSheet("background: transparent; border: none;")
         top_layout = QVBoxLayout(top)
@@ -93,11 +108,19 @@ class ToolsPanel(QFrame):
         top_layout.addLayout(grid)
         top_layout.addStretch()
 
-        root.addWidget(top, stretch=1)
+        tools_root.addWidget(top, stretch=1)
 
-        # ── Низ: блок «Информация» ──
         self.info_block = self._build_info_block()
-        root.addWidget(self.info_block, stretch=0)
+        tools_root.addWidget(self.info_block, stretch=0)
+
+        self._stack.addWidget(tools_page)
+
+        # ── Страница 1: настройки ──
+        self._settings_panel = GlobalSettingsPanel(self.controller)
+        self._stack.addWidget(self._settings_panel)
+
+        # По умолчанию — инструменты
+        self._stack.setCurrentIndex(0)
 
         # ── Обновления ──
         self.state.videos_changed.connect(self._update_all)
@@ -108,6 +131,14 @@ class ToolsPanel(QFrame):
         self.state.settings_changed.connect(self._update_all)
 
         self._update_all()
+
+    def show_tools(self):
+        """Показать страницу инструментов."""
+        self._stack.setCurrentIndex(0)
+
+    def show_settings(self):
+        """Показать страницу глобальных настроек."""
+        self._stack.setCurrentIndex(1)
 
     def _add_tool(self, grid: QGridLayout, row: int, label_text: str, tool: QWidget):
         """Добавить строку: label + stacked (tool / None)."""

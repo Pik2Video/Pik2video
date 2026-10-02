@@ -364,18 +364,12 @@ class MainWindow(QMainWindow):
         self._title_mode = 'finalize_screen'
         self._update_window_title()
 
+
     def closeEvent(self, event):
         """Перехватываем закрытие окна."""
         logger.debug("вызван closeEvent")
 
-        # Редактор открыт — IDLE прячется
-        if self._editor_visible:
-            logger.debug("Редактор открыт → IDLE скрывается")
-            self.hide()
-            event.ignore()
-            return
-
-        # Идёт запись — остановить и открыть редактор с файлом
+        # 1. Идёт запись (WAITING/RECORDING) → подтверждение
         if self.controller.is_recording():
             msg_box = QMessageBox(self)
             msg_box.setIcon(QMessageBox.Warning)
@@ -393,13 +387,18 @@ class MainWindow(QMainWindow):
             if result == QMessageBox.Yes:
                 logger.debug("Останавливаем запись → редактор откроется автоматически")
                 self.controller.stop_recording()
-                # Дальше: stop_recording → REVIEW → _enter_review →
-                # move_to_drafts → open_editor_requested → редактор откроется
 
             event.ignore()
             return
 
-        # Незавершённая сессия без активной записи
+        # 2. Идёт подготовка (PREPARING) → отмена, окно закрывается
+        if self.controller.is_preparing():
+            logger.debug("Отмена подготовки → окно закрывается")
+            self.controller.cancel_session()
+            event.accept()
+            return
+
+        # 3. Есть активные данные сессии → подтверждение удаления
         if self.controller.has_active_session_data():
             translator = self.controller.get_translator()
             msg_box = QMessageBox(self)
@@ -428,7 +427,16 @@ class MainWindow(QMainWindow):
                 event.ignore()
             return
 
+        # 4. Ничего не идёт, но редактор существует → просто скрыть MainWindow
+        if self._editor_visible:
+            logger.debug("Редактор открыт → MainWindow скрывается")
+            self.hide()
+            event.ignore()
+            return
+
+        # 5. Ничего — закрыть
         event.accept()
+
 class AppSettingsDialog(SettingsDialog):
     def __init__(self, parent, controller):
         logger.debug(f"AppSettingsDialog.__init__ - controller type: {type(controller)}")
