@@ -1,6 +1,7 @@
 # src/pik2video/application/state_machine.py
 
 from enum import Enum, auto
+
 from PySide6.QtCore import QObject, Signal
 
 

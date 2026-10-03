@@ -16,13 +16,17 @@
 import logging
 from pathlib import Path
 
-from PySide6.QtWidgets import (
-    QFrame, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QWidget,
-    QFileIconProvider, QPushButton
-)
-
-from PySide6.QtCore import Qt, Signal, QFileInfo
+from PySide6.QtCore import QFileInfo, Qt, Signal
 from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import (
+    QFileIconProvider,
+    QFrame,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +154,7 @@ class VideoFileItem(QFrame):
                     "-",
                 ],
                 capture_output=True,
+                check=False,
                 timeout=5,
             )
 

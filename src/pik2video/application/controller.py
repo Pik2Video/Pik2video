@@ -5,21 +5,20 @@
 """
 
 import logging
-import psutil
 from pathlib import Path
 from typing import Optional
 
+import psutil
 from PySide6.QtCore import QObject, Signal
 
-from .session_types import SessionType
-from .recording_service import RecordingService
-from .state_machine import AppState
-
 from .managers.ffmpeg_manager import FFmpegManager
+from .managers.recording_manager import RecordingManager
+from .managers.session_manager import SessionManager
 from .managers.settings_manager import SettingsManager
 from .managers.state_manager import StateManager
-from .managers.session_manager import SessionManager
-from .managers.recording_manager import RecordingManager
+from .recording_service import RecordingService
+from .session_types import SessionType
+from .state_machine import AppState
 
 logger = logging.getLogger(__name__)
 

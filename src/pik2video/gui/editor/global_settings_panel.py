@@ -13,17 +13,16 @@
 
 import logging
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
+from src.pik2video.gui.common.tooltip import set_tooltips_enabled
 from src.pik2video.gui.widgets.global_settings import (
+    AlwaysOnTopSetting,
+    AutoHideEditorSetting,
     LanguageSetting,
     TextSizeSetting,
     TooltipsSetting,
-    AlwaysOnTopSetting,
-    AutoHideEditorSetting,
 )
-from src.pik2video.gui.common.tooltip import set_tooltips_enabled
 
 logger = logging.getLogger(__name__)
 

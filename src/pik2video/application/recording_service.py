@@ -2,11 +2,11 @@
 import ctypes
 import logging
 from pathlib import Path
-from typing import Optional
-from PySide6.QtWidgets import QApplication   # <-- НОВОЕ: импорт для получения масштаба
 
-from .settings_model import SettingsModel
+from PySide6.QtWidgets import QApplication  # <-- НОВОЕ: импорт для получения масштаба
+
 from .session_types import SessionType
+from .settings_model import SettingsModel
 
 logger = logging.getLogger(__name__)
 

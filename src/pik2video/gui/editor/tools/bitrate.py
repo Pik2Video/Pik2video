@@ -14,9 +14,9 @@
 
 import logging
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QMenu, QLineEdit
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QMenu, QPushButton, QWidget
 
 logger = logging.getLogger(__name__)
 

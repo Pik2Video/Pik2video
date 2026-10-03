@@ -1,7 +1,9 @@
 # src/pik2video/application/session_service.py
 from pathlib import Path
 from typing import Optional
+
 from src.pik2video.storage.session_storage import SessionStorage
+
 
 class SessionService:
     """

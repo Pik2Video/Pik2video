@@ -5,9 +5,10 @@
 """
 
 import logging
+
 from PySide6.QtCore import QObject, Signal
 
-from ..state_machine import StateMachine, AppState
+from ..state_machine import AppState, StateMachine
 
 logger = logging.getLogger(__name__)
 

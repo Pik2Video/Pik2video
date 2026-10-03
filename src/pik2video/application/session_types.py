@@ -2,6 +2,7 @@
 
 from enum import Enum
 
+
 class SessionType(Enum):
     VIDEO = "video"
     SCREEN = "screen"

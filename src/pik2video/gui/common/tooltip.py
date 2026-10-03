@@ -1,8 +1,8 @@
 # src/pik2video/gui/common/tooltip.py
 
-from PySide6.QtWidgets import QLabel, QApplication, QPushButton
-from PySide6.QtCore import Qt, QTimer, QPoint
+from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QLabel, QPushButton
 
 # глобальный флаг: включены ли подсказки в приложении
 _tooltips_enabled = True

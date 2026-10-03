@@ -1,5 +1,6 @@
 # managers/ffmpeg_manager.py
 import logging
+
 from PySide6.QtCore import QObject, Signal
 
 from src.pik2video.infrastructure.ffmpeg.ffmpeg_service import FFmpegService

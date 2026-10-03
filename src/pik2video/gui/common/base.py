@@ -2,11 +2,9 @@
 
 import logging
 
-from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QPushButton
-from PySide6.QtCore import Qt, QEvent
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QCloseEvent
-from .dialogs import confirm
-from .utils import center_to_parent, keep_window_inside_screen
+from PySide6.QtWidgets import QDialog, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
 from .close_policy import (
     CloseAction,
@@ -15,7 +13,8 @@ from .close_policy import (
     CloseRule,
     evaluate_close,
 )
-
+from .dialogs import confirm
+from .utils import keep_window_inside_screen
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +95,6 @@ class BaseDialog(QDialog):
 
     def on_closed(self):
         """Хук после успешного закрытия. Переопределяется в наследниках."""
-        pass
 
 
 class BaseFormDialog(BaseDialog):
@@ -271,7 +269,6 @@ class SettingsDialog(BaseFormDialog):
             self.close()
 
     def eventFilter(self, obj, event):
-        from PySide6.QtCore import QEvent
         if obj == self._parent and event.type() == QEvent.Move:
             # Обновить позицию при перемещении родителя
             if self.isVisible():

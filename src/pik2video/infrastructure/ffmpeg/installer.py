@@ -3,12 +3,11 @@
 import os
 import shutil
 import subprocess
-import sys
+import tarfile
 import tempfile
 import zipfile
-import tarfile
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import ClassVar, Optional, Tuple
 
 from PySide6.QtCore import QObject, Signal
 
@@ -27,7 +26,7 @@ class FFmpegInstaller(QObject):
 
     # URL и суффикс для каждой платформы
     # Кортеж: (url, suffix) где suffix - расширение файла (например, .zip, .tar.xz)
-    URLS = {
+    URLS: ClassVar[dict] = {
         'macos': {
             'arm64': ('https://evermeet.cx/ffmpeg/get/zip', '.zip'),
             'x86_64': ('https://evermeet.cx/ffmpeg/get/zip', '.zip'),
@@ -98,18 +97,18 @@ class FFmpegInstaller(QObject):
             self.finished.emit(True, "Установка завершена")
 
         except Exception as e:
-            self.finished.emit(False, f"Ошибка установки: {str(e)}")
+            self.finished.emit(False, f"Ошибка установки: {e!s}")
         finally:
             # Очистка временных файлов
             if 'archive_path' in locals() and archive_path and archive_path.exists():
                 try:
                     archive_path.unlink()
-                except:
+                except Exception:
                     pass
             if 'extract_dir' in locals() and extract_dir and extract_dir.exists():
                 try:
                     shutil.rmtree(extract_dir)
-                except:
+                except Exception:
                     pass
 
     def cancel(self):
@@ -175,8 +174,8 @@ class FFmpegInstaller(QObject):
         Скачивает архив FFmpeg во временный файл.
         Возвращает путь к скачанному файлу.
         """
-        import urllib.request
         import ssl
+        import urllib.request
 
         url, suffix = self._get_download_url()
         if not url:
@@ -207,7 +206,7 @@ class FFmpegInstaller(QObject):
             urllib.request.urlretrieve(url, str(temp_path), reporthook=report_progress)
             return temp_path
         except Exception as e:
-            raise RuntimeError(f"Ошибка загрузки: {e}")
+            raise RuntimeError(f"Ошибка загрузки: {e}") from e
 
     def _extract_archive(self, archive_path: Path) -> Path:
         """Распаковывает архив (ZIP или TAR.XZ) во временную папку."""
@@ -231,7 +230,7 @@ class FFmpegInstaller(QObject):
         Возвращает путь к нему или None.
         """
         executable_name = self._get_executable_name()
-        for root, dirs, files in os.walk(extract_dir):
+        for root, _dirs, files in os.walk(extract_dir):
             if executable_name in files:
                 return Path(root) / executable_name
         return None
@@ -242,8 +241,9 @@ class FFmpegInstaller(QObject):
             result = subprocess.run(
                 [str(ffmpeg_path), '-version'],
                 capture_output=True,
+                check=False,
                 timeout=5
             )
             return result.returncode == 0
-        except:
+        except Exception:
             return False

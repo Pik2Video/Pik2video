@@ -235,9 +235,8 @@ class EditorState(QObject):
         path = self._video_files[self._active_index]
         duration = self._video_durations.get(path, 0.0)
 
-        if start < 0:
-            start = 0
-        if end > duration and duration > 0:
+        start = max(start, 0)
+        if end > duration > 0:
             end = duration
         if start >= end:
             return

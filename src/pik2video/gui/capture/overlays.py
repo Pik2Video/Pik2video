@@ -2,13 +2,13 @@
 
 import logging
 
-from PySide6.QtWidgets import QWidget, QRubberBand
-from PySide6.QtCore import Qt, QRect, QTimer, Signal
-from PySide6.QtGui import QPainter, QColor, QPen, QFont
+from PySide6.QtCore import QRect, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtWidgets import QWidget
 
 from src.pik2video.gui.common.blink_style import (
-    OVERLAY_ALPHA_DIM,
     OVERLAY_ALPHA_BRIGHT,
+    OVERLAY_ALPHA_DIM,
     lerp_alpha,
 )
 

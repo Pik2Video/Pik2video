@@ -1,10 +1,9 @@
-# application/settings_model.py
-
-import logging
-
+# src/pik2video/application/settings_model.py
 import json
-from pathlib import Path
+import logging
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +77,7 @@ class SettingsModel:
 
     finalize: FinalizeSettings = field(default_factory=FinalizeSettings)
 
-    def save_to_file(self, filepath: Path = None):
+    def save_to_file(self, filepath: Optional[Path] = None):
         """Сохраняет настройки в JSON файл"""
         if filepath is None:
             filepath = Path.home() / ".pik2video" / "settings.json"
@@ -100,7 +99,7 @@ class SettingsModel:
         
         logger.debug(f"Настройки сохранены в {filepath}")
     
-    def load_from_file(self, filepath: Path = None):
+    def load_from_file(self, filepath: Optional[Path] = None):
         """Загружает настройки из JSON файла"""
         if filepath is None:
             filepath = Path.home() / ".pik2video" / "settings.json"

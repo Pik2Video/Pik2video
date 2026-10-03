@@ -11,8 +11,10 @@
 - про FFmpeg
 """
 import logging
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel
+
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
+
 logger = logging.getLogger(__name__)
 
 SPEED_PRESETS = [0.25, 0.5, 1.0, 2.0, 4.0]

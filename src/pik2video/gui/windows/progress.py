@@ -1,11 +1,8 @@
 # src/pik2video/gui/progress_dialog.py
 
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout,
-    QLabel, QProgressBar, QPushButton, QApplication
-)
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout
 
 from src.pik2video.infrastructure.ffmpeg.installer import FFmpegInstaller
 
@@ -206,8 +203,8 @@ class ProgressDialog(QDialog):
 
     def _restart_app(self):
         """Перезапускает приложение"""
-        import sys
         import subprocess
+        import sys
         self.accept()
         # Завершаем поток, если он ещё работает (хотя он уже завершён)
         if self.worker.isRunning():

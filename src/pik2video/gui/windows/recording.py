@@ -15,13 +15,9 @@
 
 import logging
 
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QMainWindow, QMessageBox
-)
-from PySide6.QtCore import Qt, Signal, QEvent
+from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
 
-from ..common.utils import keep_window_inside_screen, bottom_right_position
-from ..common.dialogs import confirm
 from ..common.close_policy import (
     CloseAction,
     CloseContext,
@@ -29,6 +25,8 @@ from ..common.close_policy import (
     CloseRule,
     evaluate_close,
 )
+from ..common.dialogs import confirm
+from ..common.utils import bottom_right_position, keep_window_inside_screen
 
 logger = logging.getLogger(__name__)
 

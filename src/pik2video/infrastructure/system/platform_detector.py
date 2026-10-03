@@ -5,7 +5,7 @@
 
 import platform
 import sys
-from typing import Dict, Optional
+from typing import ClassVar, Dict
 
 
 class PlatformDetector:
@@ -14,14 +14,14 @@ class PlatformDetector:
     """
 
     # Карта для нормализации названий ОС
-    OS_MAP = {
+    OS_MAP: ClassVar[Dict[str, str]] = {
         "Darwin": "macos",
         "Windows": "windows",
         "Linux": "linux",
     }
 
     # Карта для архитектур (нормализация)
-    ARCH_MAP = {
+    ARCH_MAP: ClassVar[Dict[str, str]] = {
         "x86_64": "x86_64",
         "AMD64": "x86_64",
         "arm64": "arm64",

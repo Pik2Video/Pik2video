@@ -1,14 +1,13 @@
 #src/pik2video/infrastructure/ffmpeg/ffmpeg_service.py
 
 import logging
-
+import os
+import platform
 import shutil
 import subprocess
-import platform
-import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import ClassVar, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +22,7 @@ class FFmpegService:
     """
 
     # ─── Маппинг качества на параметры FFmpeg ───
-    QUALITY_PRESETS = {
+    QUALITY_PRESETS: ClassVar[dict] = {
         "Низкое": {"preset": "ultrafast", "crf": "28", "bitrate": "1M"},
         "Среднее": {"preset": "medium", "crf": "23", "bitrate": "4M"},
         "Высокое": {"preset": "slow", "crf": "18", "bitrate": "8M"},
@@ -84,6 +83,7 @@ class FFmpegService:
                 ["ffmpeg", "-version"],
                 capture_output=True,
                 text=True,
+                check=False,
                 timeout=5
             )
             return result.stdout.split("\n")[0] if result.stdout else None
@@ -231,6 +231,7 @@ class FFmpegService:
                 ["ffmpeg", "-encoders"],
                 capture_output=True,
                 text=True,
+                check=False,
                 timeout=5
             )
             return encoder in result.stdout

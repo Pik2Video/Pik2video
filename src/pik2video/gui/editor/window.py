@@ -13,14 +13,20 @@
 import logging
 from pathlib import Path
 
-from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QFrame, QLabel, QSizePolicy, QApplication, QPushButton,
-    QFileDialog, QMessageBox
-)
-
-from PySide6.QtCore import Qt, QPoint, QUrl, Signal
+from PySide6.QtCore import QPoint, Qt, QUrl, Signal
 from PySide6.QtGui import QCloseEvent
+from PySide6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from src.pik2video.gui.common.close_policy import (
     CloseAction,
@@ -31,14 +37,14 @@ from src.pik2video.gui.common.close_policy import (
 )
 from src.pik2video.gui.common.dialogs import confirm
 
-from .state import EditorState
 from .drop_zone import DropZone
-from .video_files_panel import VideoFilesPanel
-from .player import PlayerWidget
-from .timeline import TimelineWidget
-from .tools_panel import ToolsPanel
 from .export_dialog import ExportDialog
 from .frame_preview import FramePreview
+from .player import PlayerWidget
+from .state import EditorState
+from .timeline import TimelineWidget
+from .tools_panel import ToolsPanel
+from .video_files_panel import VideoFilesPanel
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +107,7 @@ class _DimOverlayWindow(QWidget):
         self.setAttribute(Qt.WA_ShowWithoutActivating)
 
     def paintEvent(self, event):
-        from PySide6.QtGui import QPainter, QColor
+        from PySide6.QtGui import QColor, QPainter
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor(0, 0, 0, 140))
 

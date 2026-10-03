@@ -1,7 +1,9 @@
 # src/pik2video/gui/widgets/finalize_screen_settings.py
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QSpinBox, QPushButton, QLabel
+from typing import ClassVar
+
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSpinBox, QWidget
 
 from .screen_settings import CleanSpinBox
 
@@ -53,7 +55,7 @@ class SpeedPresetSelector(QWidget):
 
     valueChanged = Signal(float)  # множитель
 
-    PRESETS = [0.25, 0.5, 1.0, 2.0, 4.0]
+    PRESETS: ClassVar[list] = [0.25, 0.5, 1.0, 2.0, 4.0]
 
     def __init__(self):
         super().__init__()

@@ -1,7 +1,6 @@
 # src/pik2video/gui/common/utils.py
 
-from PySide6.QtCore import Qt, QPoint, QRect
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtCore import QPoint, QRect
 
 
 # ───────── Позиционирование ─────────

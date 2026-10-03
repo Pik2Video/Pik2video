@@ -1,8 +1,8 @@
 # src/pik2video/gui/widgets/common_settings.py
 
-from PySide6.QtWidgets import QWidget, QLabel, QPushButton, QHBoxLayout, QSpinBox, QSizePolicy, QLineEdit, QApplication
-from PySide6.QtCore import Qt, QEvent, Signal, QTimer
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QIntValidator
+from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSizePolicy, QSpinBox, QWidget
 
 
 class CleanSpinBox(QSpinBox):

@@ -2,8 +2,9 @@
 
 import logging
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
 
 def setup_logging(debug_mode: bool = False, log_to_file: bool = True):
     """

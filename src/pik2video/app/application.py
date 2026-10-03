@@ -13,22 +13,19 @@
 
 import logging
 
+from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt, QObject, QEvent
 
 from src.pik2video.application.controller import AppController
 
+# импортируем управление подсказками
+from src.pik2video.gui.common.tooltip import is_tooltips_enabled, set_tooltips_enabled
+from src.pik2video.gui.windows.ffmpeg_missing import FFmpegMissingDialog
 from src.pik2video.gui.windows.recording import RecordingWindow
 
-from src.pik2video.gui.windows.ffmpeg_missing import FFmpegMissingDialog
-
-# импортируем управление подсказками
-from src.pik2video.gui.common.tooltip import set_tooltips_enabled, is_tooltips_enabled
-
-
 from .blink_manager import BlinkManager
-from .window_manager import WindowManager
 from .state_coordinator import StateCoordinator
+from .window_manager import WindowManager
 
 logger = logging.getLogger(__name__)
 

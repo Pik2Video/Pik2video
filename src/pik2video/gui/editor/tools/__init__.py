@@ -5,13 +5,16 @@
 Каждый инструмент — отдельный виджет, отвечающий только за свой параметр.
 """
 
+from .bitrate import BitrateTool
 from .format import FormatTool
 from .resolution import ResolutionTool
-from .bitrate import BitrateTool
 from .rotation import RotationTool
 from .speed import SpeedTool
 
 __all__ = [
-    "FormatTool", "ResolutionTool", "BitrateTool",
-    "RotationTool", "SpeedTool",
+    "BitrateTool",
+    "FormatTool",
+    "ResolutionTool",
+    "RotationTool",
+    "SpeedTool",
 ]

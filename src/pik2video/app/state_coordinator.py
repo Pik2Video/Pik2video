@@ -16,17 +16,15 @@
 import logging
 import shutil
 from datetime import datetime
-from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Slot
 
 from src.pik2video.application.session_types import SessionType
 from src.pik2video.application.state_machine import AppState
 from src.pik2video.gui.capture.preset_window import PresetWindow
-from src.pik2video.utils import format_size, format_time
 
-from .window_manager import WindowManager
 from .blink_manager import BlinkManager
+from .window_manager import WindowManager
 
 logger = logging.getLogger(__name__)
 

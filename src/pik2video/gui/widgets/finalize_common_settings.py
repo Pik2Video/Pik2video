@@ -1,10 +1,11 @@
 # src/pik2video/gui/widgets/finalize_common_settings.py
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QLineEdit, QLabel, QPushButton, QMenu, QFileDialog
+from pathlib import Path
+from typing import ClassVar
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
-from pathlib import Path
-
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMenu, QPushButton, QWidget
 
 
 class VideoFormatInput(QWidget):
@@ -180,7 +181,7 @@ class ResolutionSelector(QWidget):
     
     valueChanged = Signal(str)
     
-    RESOLUTIONS = {
+    RESOLUTIONS: ClassVar[dict] = {
         "original": "Оригинал",
         "1080p": "1080p",
         "720p": "720p",
@@ -277,7 +278,7 @@ class RotationSelector(QWidget):
     
     valueChanged = Signal(int)
     
-    ANGLES = {0: "0°", 90: "90°", 180: "180°", 270: "270°"}
+    ANGLES: ClassVar[dict] = {0: "0°", 90: "90°", 180: "180°", 270: "270°"}
     
     def __init__(self, initial: int = 0):
         super().__init__()

@@ -11,18 +11,13 @@
 import logging
 from datetime import timedelta
 
-from PySide6.QtWidgets import (
-    QFrame, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QLabel, QWidget, QStackedWidget
-)
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QStackedWidget, QVBoxLayout, QWidget
 
 from .global_settings_panel import GlobalSettingsPanel
-
-
+from .tools.bitrate import BitrateTool
 from .tools.format import FormatTool
 from .tools.resolution import ResolutionTool
-from .tools.bitrate import BitrateTool
 from .tools.rotation import RotationTool
 from .tools.speed import SpeedTool
 

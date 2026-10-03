@@ -1,9 +1,10 @@
 # src/pik2video/locale/translator.py
 
-import logging
-from PySide6.QtCore import QObject, Signal
 import json
+import logging
 from pathlib import Path
+
+from PySide6.QtCore import QObject, Signal
 
 # Создаём логгер для этого модуля
 logger = logging.getLogger(__name__)

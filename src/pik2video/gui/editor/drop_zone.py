@@ -17,9 +17,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel, QFileIconProvider, QPushButton, QWidget
-from PySide6.QtCore import Qt, Signal, QFileInfo
+from PySide6.QtCore import QFileInfo, Qt, Signal
 from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import QFileIconProvider, QFrame, QLabel, QPushButton, QVBoxLayout, QWidget
 
 logger = logging.getLogger(__name__)
 
@@ -258,6 +258,7 @@ class DropZone(QFrame):
                     "-",
                 ],
                 capture_output=True,
+                check=False,
                 timeout=5,
             )
 

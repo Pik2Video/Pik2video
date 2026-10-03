@@ -1,18 +1,13 @@
 # src/pik2video/gui/capture/panels.py
 
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QStackedWidget,
-    QSizePolicy
-)
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget
 
 from src.pik2video.gui.common.blink_style import (
-    LABEL_ALPHA_DIM,
     LABEL_ALPHA_BRIGHT,
+    LABEL_ALPHA_DIM,
     lerp_alpha,
 )
-
 from src.pik2video.gui.common.tooltip import TooltipButton
 
 

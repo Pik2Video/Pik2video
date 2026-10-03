@@ -1,6 +1,7 @@
 # src/pik2video/gui/widgets/setting_row.py
 
-from PySide6.QtWidgets import QWidget, QLabel, QHBoxLayout, QSpacerItem, QSizePolicy
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QSpacerItem, QWidget
+
 
 class SettingRow(QWidget):
     """
@@ -58,4 +59,4 @@ class SettingRow(QWidget):
         if hasattr(self, 'label'):
             self.label.setText(text)
         else:
-            print(f"[ERROR] SettingRow: label не существует!")
+            print("[ERROR] SettingRow: label не существует!")

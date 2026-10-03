@@ -1,15 +1,15 @@
 # src/pik2video/gui/capture/sessions.py
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QSpinBox
 from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtWidgets import QSpinBox, QVBoxLayout, QWidget
 
+from ..common.base import SettingsDialog
+from ..common.utils import keep_window_inside_screen
+from ..widgets.common_settings import ExportFilenameInput, QualitySwitcher, TimerInput
+from ..widgets.record_settings import FpsSwitcher
 from ..widgets.screen_settings import CapturePerMinuteInput, CleanSpinBox
 from ..widgets.setting_row import SettingRow
-from ..widgets.record_settings import FpsSwitcher
-from ..widgets.common_settings import TimerInput, QualitySwitcher, ExportFilenameInput
 
-from ..common.utils import keep_window_inside_screen
-from ..common.base import SettingsDialog
 #from .overlays import CoordinateOverlay
 from .panels import CapturePanel
 

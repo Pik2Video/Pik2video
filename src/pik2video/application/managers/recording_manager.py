@@ -7,18 +7,17 @@
 import logging
 import time
 from pathlib import Path
-from typing import Optional
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
+from src.pik2video.utils import format_size, format_time
 
+from ..recording_service import RecordingService
 from ..session_types import SessionType
 from ..state_machine import AppState
-from ..recording_service import RecordingService
+from .session_manager import SessionManager
 from .settings_manager import SettingsManager
 from .state_manager import StateManager
-from .session_manager import SessionManager
-from src.pik2video.utils import format_time, format_size
 
 logger = logging.getLogger(__name__)
 

@@ -15,14 +15,11 @@ from typing import Optional
 
 from PySide6.QtCore import QObject
 
-from ..settings_model import SettingsModel
-
 from src.pik2video.locale.languages import code_from_display_name
 from src.pik2video.locale.translator import Translator
-from src.pik2video.locale.languages import code_from_display_name
-
 
 from ..session_types import SessionType
+from ..settings_model import SettingsModel
 
 logger = logging.getLogger(__name__)
 

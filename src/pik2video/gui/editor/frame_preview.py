@@ -13,8 +13,8 @@
 
 import logging
 
-from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QApplication
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 
 logger = logging.getLogger(__name__)
 

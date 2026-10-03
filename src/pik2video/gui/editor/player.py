@@ -15,15 +15,20 @@
 
 import logging
 
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
-    QLabel, QPushButton, QSlider, QSizePolicy
-)
-from PySide6.QtCore import Qt, Signal, QUrl
+from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QPixmap
-
-from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QSlider,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from .volume import VolumeControl
 
@@ -460,8 +465,7 @@ class PlayerWidget(QWidget):
     def _on_rewind(self):
         """Перемотать на 5 секунд назад."""
         pos = self._player.position() - SEEK_STEP_SEC * 1000
-        if pos < 0:
-            pos = 0
+        pos = max(pos, 0)
         self._player.setPosition(pos)
 
     def _on_forward(self):

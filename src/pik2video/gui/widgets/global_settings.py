@@ -1,8 +1,8 @@
 # src/pik2video/gui/widgets/global_settings.py
 
-from PySide6.QtWidgets import QComboBox, QSpinBox, QCheckBox, QPushButton, QMenu
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QCheckBox, QMenu, QPushButton
 
 from src.pik2video.locale.languages import (
     AVAILABLE_LANGUAGES,

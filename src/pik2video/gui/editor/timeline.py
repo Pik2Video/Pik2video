@@ -15,9 +15,9 @@
 
 import logging
 
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Qt, Signal, QRectF, QPointF
-from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPolygonF
 
 logger = logging.getLogger(__name__)
 

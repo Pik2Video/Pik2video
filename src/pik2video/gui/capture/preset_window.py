@@ -1,16 +1,18 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
-from PySide6.QtCore import Qt, Signal, QTimer, QSize
+from typing import ClassVar
+
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from src.pik2video.gui.common.blink_style import (
-    PRESET_BG_DIM,
     PRESET_BG_BRIGHT,
-    PRESET_BORDER_DIM,
+    PRESET_BG_DIM,
     PRESET_BORDER_BRIGHT,
+    PRESET_BORDER_DIM,
     lerp_color_hex,
 )
-
 from src.pik2video.gui.common.tooltip import TooltipButton
+
 
 class PresetWindow(QWidget):
     """
@@ -20,7 +22,7 @@ class PresetWindow(QWidget):
     
     preset_selected = Signal(dict, str, str)
     
-    PRESETS = [
+    PRESETS: ClassVar[list] = [
         ("🖥️", "fullscreen", "Весь экран"),
         ("📱", "mobile", "Мобильный"),
         ("📺", "youtube", "YouTube"),
@@ -30,7 +32,7 @@ class PresetWindow(QWidget):
         ("📺", "16x10", "16:10"),
     ]
     
-    PRESET_SIZES = {
+    PRESET_SIZES: ClassVar[dict] = {
         "fullscreen": (0, 0),
         "mobile": (390, 844),
         "youtube": (1920, 1080),

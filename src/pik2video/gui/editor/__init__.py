@@ -3,18 +3,24 @@
 Пакет редактора видео.
 """
 
-from .window import EditorWindow
-from .state import EditorState
 from .drop_zone import DropZone
-from .video_files_panel import VideoFilesPanel
-from .player import PlayerWidget
-from .timeline import TimelineWidget
-from .volume import VolumeControl
-from .tools_panel import ToolsPanel
 from .export_service import ExportService
+from .player import PlayerWidget
+from .state import EditorState
+from .timeline import TimelineWidget
+from .tools_panel import ToolsPanel
+from .video_files_panel import VideoFilesPanel
+from .volume import VolumeControl
+from .window import EditorWindow
 
 __all__ = [
-    "EditorWindow", "EditorState", "DropZone", "VideoFilesPanel",
-    "PlayerWidget", "TimelineWidget", "VolumeControl", "ToolsPanel",
+    "DropZone",
+    "EditorState",
+    "EditorWindow",
     "ExportService",
+    "PlayerWidget",
+    "TimelineWidget",
+    "ToolsPanel",
+    "VideoFilesPanel",
+    "VolumeControl",
 ]

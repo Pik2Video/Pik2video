@@ -34,3 +34,57 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
+
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "F",     # pyflakes — реальные проблемы
+    "E",     # ошибки стиля
+    "W",     # предупреждения стиля
+    "I",     # порядок импортов
+    "B",     # типичные баги
+    "RUF",   # правила ruff (кроме кириллицы)
+    "PLW",   # pylint warnings (кроме magic value)
+    "PLR",   # pylint refactor (кроме сложных функций)
+    "PIE",   # misc
+]
+
+ignore = [
+    # ── Стиль, не критично ──
+    "E501",    # длина строки
+    "W293",    # пробелы в пустых строках
+    "W291",    # пробелы в конце строк
+    "PLW0603",
+    
+    # ── Кириллица — у нас русский проект ──
+    "RUF001",  # кириллица в строке
+    "RUF002",  # кириллица в docstring
+    "RUF003",  # кириллица в комментарии
+
+    # ── Осознанный выбор ──
+    "BLE001",  # широкий except Exception
+    "FA100",   # __future__ annotations
+    "FA102",
+    "DTZ005",  # datetime без tz
+    "SIM102",  # свёрнутый if
+    "UP045",   # PEP 604
+    "S110",    # try/except/pass
+
+    # ── Стиль / сложность — не критично ──
+    "PLR2004", # магические числа
+    "PLR0915", # слишком длинная функция
+    "PLR0911", # слишком много return
+    "PLR0913", # слишком много аргументов
+    "PLR0917", # слишком много позиционных аргументов
+    "PLR5501", # collapsible-else-if
+
+    # ── Косметика ──
+    "RUF005",  # список + список
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["E", "F"]

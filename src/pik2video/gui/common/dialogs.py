@@ -4,7 +4,6 @@
 from PySide6.QtWidgets import QMessageBox
 
 
-
 def confirm(
     parent,
     text: str,
