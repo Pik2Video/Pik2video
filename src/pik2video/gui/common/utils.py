@@ -10,7 +10,6 @@ def bottom_right_position(window, screen_geometry: QRect, margin: int = 0) -> QP
     y = screen_geometry.bottom() - window.height() - margin
     return QPoint(x, y)
 
-
 def center_relative_to(parent_geometry: QRect, window) -> QPoint:
     x = parent_geometry.x() + (parent_geometry.width() - window.width()) // 2
     y = parent_geometry.y() + (parent_geometry.height() - window.height()) // 2

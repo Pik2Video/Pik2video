@@ -4,7 +4,6 @@
 
 Содержит:
 - sessions.py — CaptureSession, VideoCaptureSession, ScreenCaptureSession,
-                VideoFinalizeWidget, ScreenFinalizeWidget,
                 RecordSettingsDialog, ScreenSettingsDialog
 - panels.py — CapturePanel
 - overlays.py — CoordinateOverlay

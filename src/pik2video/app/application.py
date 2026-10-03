@@ -4,8 +4,9 @@
 
 Отвечает только за:
 - создание QApplication
-- создание AppController и MainWindow
+- создание AppController и RecordingWindow
 - создание менеджеров (BlinkManager, WindowManager, StateCoordinator)
+- создание и показ EditorWindow
 - связывание сигналов между ними
 - запуск главного цикла Qt
 """
@@ -16,9 +17,10 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, QObject, QEvent
 
 from src.pik2video.application.controller import AppController
-from src.pik2video.gui.windows.main import MainWindow
+
+from src.pik2video.gui.windows.recording import RecordingWindow
+
 from src.pik2video.gui.windows.ffmpeg_missing import FFmpegMissingDialog
-from src.pik2video.gui.common.utils import bottom_right_position
 
 # импортируем управление подсказками
 from src.pik2video.gui.common.tooltip import set_tooltips_enabled, is_tooltips_enabled
@@ -57,9 +59,7 @@ class Application:
         self._tooltip_filter = _TooltipEventFilter()
         self.qt_app.installEventFilter(self._tooltip_filter)
 
-
-        # ── Главное окно ──
-        self.main_window = MainWindow(self.controller)
+        self.main_window = RecordingWindow(self.controller)
 
         # ── Менеджеры ──
         self.blink_manager = BlinkManager()
@@ -83,11 +83,6 @@ class Application:
             self.state_coordinator.on_main_window_state_changed
         )
 
-        self.main_window.start_video_requested.connect(self.controller.prepare_video)
-        self.main_window.start_screen_requested.connect(self.controller.prepare_screen)
-        self.main_window.settings_requested.connect(self.window_manager.open_app_settings)
-
-        self.main_window.editor_requested.connect(self._open_editor)
         self.controller.open_editor_requested.connect(self._open_editor_with_file)
         self._editor_window = None
         self._editor_hidden_for_record = False
@@ -99,17 +94,8 @@ class Application:
                 self.main_window.windowFlags() | Qt.WindowStaysOnTopHint
             )
 
-        self._position_main_window()
-
         # При запуске сразу открываем редактор (IDLE остаётся скрытым)
         self._open_editor()
-
-    # ---------------- Positioning ----------------
-
-    def _position_main_window(self):
-        screen = self.main_window.screen().availableGeometry()
-        pos = bottom_right_position(self.main_window, screen, margin=117)
-        self.main_window.move(pos)
 
     # ---------------- FFmpeg ----------------
 
@@ -187,10 +173,7 @@ class Application:
             logger.info("Редактор восстановлен после записи")
             return
 
-    def _on_open_settings(self):
-        """Кнопка ⚙️ в редакторе → открыть глобальные настройки."""
-        self.window_manager.open_app_settings()
-
+    
     def _on_editor_closed(self):
         """Редактор закрыт. Если окно записи не видно — выходим."""
         logger.info("Редактор закрыт")

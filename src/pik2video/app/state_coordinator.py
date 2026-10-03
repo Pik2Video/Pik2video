@@ -23,7 +23,6 @@ from PySide6.QtCore import QObject, Qt, Slot
 from src.pik2video.application.session_types import SessionType
 from src.pik2video.application.state_machine import AppState
 from src.pik2video.gui.capture.preset_window import PresetWindow
-from src.pik2video.gui.common.utils import bring_window_to_front
 from src.pik2video.utils import format_size, format_time
 
 from .window_manager import WindowManager
@@ -273,7 +272,8 @@ class StateCoordinator(QObject):
             return
 
         if self.main_window.current_session:
-            preset_name = self.main_window.translator.tr("preset_fullscreen")
+            translator = self.controller.get_translator()
+            preset_name = translator.tr("preset_fullscreen")
             self.main_window.current_session.set_info_text(preset_name)
 
     # ==================================================

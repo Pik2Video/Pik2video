@@ -3,34 +3,43 @@
 
 from PySide6.QtWidgets import QMessageBox
 
-def confirm(parent, text: str, title: str = "Подтверждение", translator=None) -> bool:
+
+
+def confirm(
+    parent,
+    text: str,
+    title: str = "Подтверждение",
+    translator=None,
+    yes_label: str = "",
+    no_label: str = "",
+) -> bool:
     """
     Универсальное окно подтверждения.
     Возвращает True если пользователь нажал "Да".
+
+    yes_label / no_label — переопределяют текст кнопок.
+    Если не заданы, берётся из translator или дефолт.
     """
     msg = QMessageBox(parent)
-    
-    # Если есть translator, переводим кнопки
+    msg.setIcon(QMessageBox.Question)
+    msg.setText(text)
+
     if translator:
         msg.setWindowTitle(translator.tr("confirm_title"))
-        msg.setText(text)                    # текст уже должен быть переведен до вызова
-        msg.setIcon(QMessageBox.Question)
-        
-        btn_yes = msg.addButton(translator.tr("confirm_yes"), QMessageBox.YesRole)
-        btn_no = msg.addButton(translator.tr("confirm_no"), QMessageBox.NoRole)
+        default_yes = translator.tr("confirm_yes")
+        default_no = translator.tr("confirm_no")
     else:
         msg.setWindowTitle(title)
-        msg.setText(text)
-        msg.setIcon(QMessageBox.Question)
-        
-        btn_yes = msg.addButton("Да", QMessageBox.YesRole)
-        btn_no = msg.addButton("Нет", QMessageBox.NoRole)
-    
+        default_yes = "Да"
+        default_no = "Нет"
+
+    btn_yes = msg.addButton(yes_label or default_yes, QMessageBox.YesRole)
+    btn_no = msg.addButton(no_label or default_no, QMessageBox.NoRole)
+
     msg.setDefaultButton(btn_no)
     msg.exec()
-    
-    return msg.clickedButton() == btn_yes
 
+    return msg.clickedButton() == btn_yes
 
 def info(parent, text: str, title: str = "Информация", translator=None):
     """

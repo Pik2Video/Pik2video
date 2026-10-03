@@ -62,8 +62,9 @@ __all__ = ["Application"]
 
 Отвечает только за:
 - создание QApplication
-- создание AppController и MainWindow
+- создание AppController и RecordingWindow
 - создание менеджеров (BlinkManager, WindowManager, StateCoordinator)
+- создание и показ EditorWindow
 - связывание сигналов между ними
 - запуск главного цикла Qt
 """
@@ -74,9 +75,10 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, QObject, QEvent
 
 from src.pik2video.application.controller import AppController
-from src.pik2video.gui.windows.main import MainWindow
+
+from src.pik2video.gui.windows.recording import RecordingWindow
+
 from src.pik2video.gui.windows.ffmpeg_missing import FFmpegMissingDialog
-from src.pik2video.gui.common.utils import bottom_right_position
 
 from src.pik2video.gui.common.tooltip import set_tooltips_enabled, is_tooltips_enabled
 
@@ -110,8 +112,7 @@ class Application:
         self._tooltip_filter = _TooltipEventFilter()
         self.qt_app.installEventFilter(self._tooltip_filter)
 
-
-        self.main_window = MainWindow(self.controller)
+        self.main_window = RecordingWindow(self.controller)
 
         self.blink_manager = BlinkManager()
         self.window_manager = WindowManager(
@@ -133,30 +134,18 @@ class Application:
             self.state_coordinator.on_main_window_state_changed
         )
 
-        self.main_window.start_video_requested.connect(self.controller.prepare_video)
-        self.main_window.start_screen_requested.connect(self.controller.prepare_screen)
-        self.main_window.settings_requested.connect(self.window_manager.open_app_settings)
-
-        self.main_window.editor_requested.connect(self._open_editor)
         self.controller.open_editor_requested.connect(self._open_editor_with_file)
         self._editor_window = None
+        self._editor_hidden_for_record = False
+        self.controller.state_changed.connect(self._on_state_changed_editor_visibility)
 
         # ── Always on top at startup ──
         if self.controller.get_always_on_top():
             self.main_window.setWindowFlags(
                 self.main_window.windowFlags() | Qt.WindowStaysOnTopHint
             )
-            self.main_window.show()
 
-        self._position_main_window()
-        self.main_window.show()
-
-    # ---------------- Positioning ----------------
-
-    def _position_main_window(self):
-        screen = self.main_window.screen().availableGeometry()
-        pos = bottom_right_position(self.main_window, screen, margin=117)
-        self.main_window.move(pos)
+        self._open_editor()
 
     # ---------------- FFmpeg ----------------
 
@@ -172,7 +161,10 @@ class Application:
 
         if self._editor_window is None:
             self._editor_window = EditorWindow(controller=self.controller)
-            self._editor_window.record_requested.connect(self._on_editor_record_requested)
+            self._editor_window.record_video_requested.connect(self._on_start_video)
+            self._editor_window.record_screen_requested.connect(self._on_start_screen)
+            self._editor_window.record_audio_requested.connect(self._on_start_audio)
+            #self._editor_window.settings_requested.connect(self._on_open_settings)
             self._editor_window.closed.connect(self._on_editor_closed)
 
         self.main_window.set_editor_visible(True)
@@ -181,25 +173,76 @@ class Application:
         self._editor_window.raise_()
         self._editor_window.activateWindow()
 
-    def _on_editor_record_requested(self):
-        """Кнопка «Запись» в редакторе → показать IDLE поверх."""
+    def _on_start_video(self):
+        """Кнопка «запись видео» в редакторе → показать IDLE + начать подготовку."""
         self.main_window.show()
         self.main_window.raise_()
         self.main_window.activateWindow()
+        self.controller.prepare_video()
 
+    def _on_start_screen(self):
+        """Кнопка «скрин запись» в редакторе → показать IDLE + начать подготовку."""
+        self.main_window.show()
+        self.main_window.raise_()
+        self.main_window.activateWindow()
+        self.controller.prepare_screen()
+
+    def _on_start_audio(self):
+        """Кнопка «запись звука» — пока заглушка."""
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.information(
+            self._editor_window,
+            "Запись звука",
+            "Функция появится в следующих версиях."
+        )
+
+    def _on_state_changed_editor_visibility(self, state):
+        """Скрыть/показать редактор в зависимости от состояния."""
+        from src.pik2video.application.state_machine import AppState
+
+        if state in (AppState.PREPARING_VIDEO, AppState.PREPARING_SCREEN):
+            if not self.controller.get_auto_hide_editor():
+                return
+            if self._editor_window is None or not self._editor_window.isVisible():
+                return
+            self._editor_window.hide()
+            self._editor_hidden_for_record = True
+            logger.info("Редактор скрыт для записи")
+            return
+
+        if state == AppState.IDLE:
+            if not self._editor_hidden_for_record:
+                return
+            self._editor_hidden_for_record = False
+            if self._editor_window is not None:
+                self._editor_window.show()
+                self._editor_window.raise_()
+                self._editor_window.activateWindow()
+            logger.info("Редактор восстановлен после записи")
+            return
+
+    
     def _on_editor_closed(self):
-        """Редактор скрыт → показать IDLE, разблокировать кнопку."""
+        """Редактор закрыт. Если окно записи не видно — выходим."""
+        logger.info("Редактор закрыт")
         self.main_window.set_editor_visible(False)
-        self.main_window.show()
-        self.main_window.raise_()
-        self.main_window.activateWindow()
+
+        if self.main_window.isVisible():
+            logger.debug("Окно записи видно → приложение продолжает работу")
+            return
+
+        logger.info("Все окна закрыты — выходим")
+        self.qt_app.quit()
 
     def _open_editor_with_file(self, path: str):
         from src.pik2video.gui.editor.window import EditorWindow
 
         if self._editor_window is None:
             self._editor_window = EditorWindow(controller=self.controller)
-            self._editor_window.record_requested.connect(self._on_editor_record_requested)
+            self._editor_window.record_video_requested.connect(self._on_start_video)
+            self._editor_window.record_screen_requested.connect(self._on_start_screen)
+            self._editor_window.record_audio_requested.connect(self._on_start_audio)
+            #self._editor_window.settings_requested.connect(self._on_open_settings)
             self._editor_window.closed.connect(self._on_editor_closed)
 
         self._editor_window.load_file(path)
@@ -209,17 +252,6 @@ class Application:
         self._editor_window.raise_()
         self._editor_window.activateWindow()
 
-    def _open_editor_with_file(self, path: str):
-        """Открыть редактор и загрузить в него файл."""
-        from src.pik2video.gui.editor.window import EditorWindow
-
-        if self._editor_window is None:
-            self._editor_window = EditorWindow(controller=self.controller)
-
-        self._editor_window.load_file(path)
-        self._editor_window.show()
-        self._editor_window.raise_()
-        self._editor_window.activateWindow()
 
     # ---------------- Run ----------------
 
@@ -326,7 +358,6 @@ from PySide6.QtCore import QObject, Qt, Slot
 from src.pik2video.application.session_types import SessionType
 from src.pik2video.application.state_machine import AppState
 from src.pik2video.gui.capture.preset_window import PresetWindow
-from src.pik2video.gui.common.utils import bring_window_to_front
 from src.pik2video.utils import format_size, format_time
 
 from .window_manager import WindowManager
@@ -369,12 +400,7 @@ class StateCoordinator(QObject):
 
         # ── IDLE ──
         if state == AppState.IDLE:
-            if getattr(self.main_window, "_editor_visible", False):
-                logger.debug("IDLE: редактор открыт → IDLE остаётся скрытым")
-                return
-            self.main_window.show_idle_screen()
-            self.main_window.activateWindow()
-            bring_window_to_front(self.main_window)
+            logger.debug("IDLE: редактор активен, IDLE-окно не показываем")
             return
 
         # ── PREPARING ──
@@ -628,7 +654,7 @@ class WindowManager(QObject):
 
         self.overlay: Optional[CoordinateOverlay] = None
         self.preset_window: Optional[PresetWindow] = None
-        self.app_settings_window = None
+        #self.app_settings_window = None
 
     # ---------------- Overlay ----------------
 
@@ -662,19 +688,6 @@ class WindowManager(QObject):
             self.preset_window.close()
             self.preset_window = None
             logger.debug("Окно пресетов закрыто")
-
-    # ---------------- App settings ----------------
-
-    def open_app_settings(self):
-        from src.pik2video.gui.windows.main import AppSettingsDialog
-
-        if self.app_settings_window is None:
-            self.app_settings_window = AppSettingsDialog(self.main_window, self.controller)
-
-        keep_window_inside_screen(self.app_settings_window)
-        self.app_settings_window.show()
-        self.app_settings_window.activateWindow()
-        bring_window_to_front(self.app_settings_window)
 
     # ---------------- Minimize / restore ----------------
 
@@ -962,6 +975,12 @@ class AppController(QObject):
 
     def set_preset_vertical(self, value):
         self.settings_manager.set_preset_vertical(value)
+
+    def get_auto_hide_editor(self) -> bool:
+        return self.settings_manager.get_auto_hide_editor()
+
+    def set_auto_hide_editor(self, value: bool):
+        self.settings_manager.set_auto_hide_editor(value)
 
     def get_record_fps(self):
         return self.settings_manager.get_record_fps()
@@ -1617,6 +1636,13 @@ class SettingsManager(QObject):
         self.settings.global_settings.preset_vertical = value
         logger.debug(f"Preset вертикальный: {value}")
 
+    def get_auto_hide_editor(self) -> bool:
+        return self.settings.global_settings.auto_hide_editor
+
+    def set_auto_hide_editor(self, value: bool):
+        self.settings.global_settings.auto_hide_editor = value
+        logger.debug(f"Auto-hide editor: {value}")
+
 
     def get_record_fps(self) -> int:
         return self.settings.record.fps
@@ -2090,6 +2116,7 @@ class AppGlobalSettings:
     # start_delay: int = 0 
     always_on_top: bool = False
     preset_vertical: bool = False  # 🆕 false = горизонтально, true = вертикально
+    auto_hide_editor: bool = False  # 🆕 автоскрытие редактора при старте записи
 
 
 @dataclass
@@ -2180,7 +2207,8 @@ class SettingsModel:
                 self.global_settings.text_size = gs.get("text_size", 12)
                 self.global_settings.show_tooltips = gs.get("show_tooltips", True)
                 self.global_settings.always_on_top = gs.get("always_on_top", False)
-                self.global_settings.preset_vertical = gs.get("preset_vertical", False)  # 🆕
+                self.global_settings.preset_vertical = gs.get("preset_vertical", False)
+                self.global_settings.auto_hide_editor = gs.get("auto_hide_editor", False)  # 🆕
             
             if "record" in data:
                 r = data["record"]
@@ -2401,7 +2429,6 @@ class StateMachine(QObject):
 
 Содержит:
 - sessions.py — CaptureSession, VideoCaptureSession, ScreenCaptureSession,
-                VideoFinalizeWidget, ScreenFinalizeWidget,
                 RecordSettingsDialog, ScreenSettingsDialog
 - panels.py — CapturePanel
 - overlays.py — CoordinateOverlay
@@ -3297,12 +3324,9 @@ from ..widgets.setting_row import SettingRow
 from ..widgets.record_settings import FpsSwitcher
 from ..widgets.common_settings import TimerInput, QualitySwitcher, ExportFilenameInput
 
-from ..widgets.finalize_common_settings import  ExportPathInput, VideoFormatInput, ResolutionSelector, BitrateSelector, RotationSelector  # 🆕
-from ..widgets.finalize_screen_settings import PlaybackFpsInput, SpeedPresetSelector
-
 from src.pik2video.gui.common.dialogs import confirm
 from ..common.utils import center_to_parent, fullscreen_geometry, bring_window_to_front, keep_window_inside_screen
-from ..common.base import SettingsDialog, FinalizeWidget
+from ..common.base import SettingsDialog
 from .overlays import CoordinateOverlay
 from .panels import CapturePanel
 
@@ -3448,27 +3472,6 @@ class CaptureSession(QWidget):
     def create_settings_dialog(self):
         raise NotImplementedError
 
-    def on_before_close(self) -> bool:
-        """
-        Решает, можно ли закрыть окно.
-        PREPARING → без подтверждения.
-        RECORDING → подтверждение.
-        """
-        if self.controller.is_preparing():
-            return True
-
-        if self.controller.is_recording():
-            if confirm(
-                self,
-                "Прервать запись?\n\n"
-                "Текущая запись будет остановлена.\n"
-                "Все данные этой сессии будут удалены."
-            ):
-                self.cancel_requested.emit()
-                return True
-            return False
-
-        return True
 
     time_update_requested = Signal()
     ram_update_requested = Signal()
@@ -3728,201 +3731,24 @@ class ScreenSettingsDialog(SettingsDialog):
         self.controller.set_screen_timer(self.timer_input.get_seconds())
         return True
 
-''' ФИНАЛЬНОЕ ОКНО ВИДЕОЗАПИСИ '''
-class VideoFinalizeWidget(FinalizeWidget):
-    """Виджет финализации видео (встраивается в MainWindow)"""
-    
-    def __init__(self, parent, controller):
-        super().__init__(parent, controller, title="")
-        self.build_content(self.content_layout)
-        self.retranslate_ui()
-    
-    def retranslate_ui(self):
-        """Обновляет тексты при смене языка"""
-        super().retranslate_ui()
-        if hasattr(self, 'row_format'):
-            self.row_format.setText(self.translator.tr("video_format"))
-        if hasattr(self, 'row_resolution'):
-            self.row_resolution.setText(self.translator.tr("resolution"))
-        if hasattr(self, 'row_bitrate'):
-            self.row_bitrate.setText(self.translator.tr("bitrate"))
-        if hasattr(self, 'row_rotation'):
-            self.row_rotation.setText(self.translator.tr("rotation"))
-        
-    def build_content(self, layout: QVBoxLayout):
-
-        self.video_format_selector = VideoFormatInput(
-            initial=self.controller.get_video_format()
-        )
-        self.row_format = SettingRow("", self.video_format_selector)
-        layout.addWidget(self.row_format)
-        self.video_format_selector.valueChanged.connect(self.controller.set_video_format)
-
-        self.resolution_selector = ResolutionSelector(
-            initial=self.controller.get_resolution()
-        )
-        self.row_resolution = SettingRow("", self.resolution_selector)
-        layout.addWidget(self.row_resolution)
-        self.resolution_selector.valueChanged.connect(self.controller.set_resolution)
-        
-        self.bitrate_selector = BitrateSelector(
-            mode=self.controller.get_bitrate_mode(),
-            value=self.controller.get_bitrate_value()
-        )
-        self.row_bitrate = SettingRow("", self.bitrate_selector)
-        layout.addWidget(self.row_bitrate)
-        self.bitrate_selector.valueChanged.connect(self.controller.set_bitrate)
-        
-        self.rotation_selector = RotationSelector(
-            initial=self.controller.get_rotation()
-        )
-        self.row_rotation = SettingRow("", self.rotation_selector)
-        layout.addWidget(self.row_rotation)
-        self.rotation_selector.valueChanged.connect(self.controller.set_rotation)
-
-
-        preview_widget = QWidget()
-        preview_layout = QHBoxLayout(preview_widget)
-        preview_layout.setContentsMargins(20, 0, 20, 0)
-        preview_layout.setSpacing(10)
-        
-        self.preview_time = QLabel("TIME: --:--:--")
-        self.preview_time.setStyleSheet("color: #ccc; font-size: 12px; background: transparent; border: none;")
-        self.preview_time.setAlignment(Qt.AlignCenter)
-        
-        self.preview_label = QLabel("  значения при экспорте   ")
-        self.preview_label.setStyleSheet("color: #888; font-size: 11px; background: transparent; border: none;")
-        self.preview_label.setAlignment(Qt.AlignCenter)
-        
-        self.preview_ram = QLabel("RAM: --")
-        self.preview_ram.setStyleSheet("color: #ccc; font-size: 12px; background: transparent; border: none;")
-        self.preview_ram.setAlignment(Qt.AlignCenter)
-        
-        
-        preview_layout.addWidget(self.preview_time)
-        preview_layout.addStretch()
-        preview_layout.addWidget(self.preview_label)
-        preview_layout.addStretch()
-        preview_layout.addWidget(self.preview_ram)
-        
-        layout.addWidget(preview_widget)
-
-        self.export_path_input = ExportPathInput(
-            controller=self.controller,
-            initial_path=self.controller.get_export_path()
-        )
-        layout.addWidget(self.export_path_input)
-        self.export_path_input.valueChanged.connect(self.controller.set_export_path)
-
-''' ФИНАЛЬНОЕ ОКНО СЕРИЙНОГО ЗАХВАТА '''
-class ScreenFinalizeWidget(FinalizeWidget):
-    """Виджет финализации screen захвата (встраивается в MainWindow)"""
-    
-    def __init__(self, parent, controller):
-        super().__init__(parent, controller, title="")
-        self.build_content(self.content_layout)
-
-        self.retranslate_ui()
-    
-    def retranslate_ui(self):
-        """Обновляет тексты при смене языка"""
-        super().retranslate_ui()
-        
-        if hasattr(self, 'row_format'):
-            self.row_format.setText(self.translator.tr("video_format"))
-        if hasattr(self, 'row_fps'):
-            self.row_fps.setText(self.translator.tr("playback_fps"))
-
-        if hasattr(self, 'row_speed'):
-            self.row_speed.setText(self.translator.tr("playback_speed"))
-
-        if hasattr(self, 'row_resolution'):
-            self.row_resolution.setText(self.translator.tr("resolution"))
-        if hasattr(self, 'row_bitrate'):
-            self.row_bitrate.setText(self.translator.tr("bitrate"))
-        if hasattr(self, 'row_rotation'):
-            self.row_rotation.setText(self.translator.tr("rotation"))
-        
-    def build_content(self, layout: QVBoxLayout):
-        self.video_format_selector = VideoFormatInput(
-            initial="GIF"
-        )
-        self.row_format = SettingRow("", self.video_format_selector)
-        layout.addWidget(self.row_format)
-        self.video_format_selector.valueChanged.connect(self.controller.set_video_format)
-
-        self.resolution_selector = ResolutionSelector(
-            initial=self.controller.get_resolution()
-        )
-        self.row_resolution = SettingRow("", self.resolution_selector)
-        layout.addWidget(self.row_resolution)
-        self.resolution_selector.valueChanged.connect(self.controller.set_resolution)
-        
-        self.bitrate_selector = BitrateSelector(
-            mode=self.controller.get_bitrate_mode(),
-            value=self.controller.get_bitrate_value()
-        )
-        self.row_bitrate = SettingRow("", self.bitrate_selector)
-        layout.addWidget(self.row_bitrate)
-        self.bitrate_selector.valueChanged.connect(self.controller.set_bitrate)
-        
-        self.rotation_selector = RotationSelector(
-            initial=self.controller.get_rotation()
-        )
-        self.row_rotation = SettingRow("", self.rotation_selector)
-        layout.addWidget(self.row_rotation)
-        self.rotation_selector.valueChanged.connect(self.controller.set_rotation)
-
-        self.playback_fps = PlaybackFpsInput(
-            initial=self.controller.get_screen_finalize_fps()
-        )
-        self.row_fps = SettingRow("", self.playback_fps)
-        layout.addWidget(self.row_fps)
-        self.playback_fps.valueChanged.connect(self.controller.set_screen_finalize_fps)
-
-        self.speed_preset = SpeedPresetSelector()
-        self.row_speed = SettingRow("", self.speed_preset)
-        layout.addWidget(self.row_speed)
-        self.speed_preset.valueChanged.connect(self.controller.set_speed_multiplier)
-
-        preview_widget = QWidget()
-        preview_layout = QHBoxLayout(preview_widget)
-        preview_layout.setContentsMargins(20, 0, 20, 0)
-        preview_layout.setSpacing(10)
-        
-        self.preview_time = QLabel("TIME: --:--:--")
-        self.preview_time.setStyleSheet("color: #ccc; font-size: 12px; background: transparent; border: none;")
-        self.preview_time.setAlignment(Qt.AlignCenter)
-        
-        self.preview_label = QLabel("  значения при экспорте   ")
-        self.preview_label.setStyleSheet("color: #888; font-size: 11px; background: transparent; border: none;")
-        self.preview_label.setAlignment(Qt.AlignCenter)
-        
-        self.preview_ram = QLabel("RAM: --")
-        self.preview_ram.setStyleSheet("color: #ccc; font-size: 12px; background: transparent; border: none;")
-        self.preview_ram.setAlignment(Qt.AlignCenter)
-        
-        preview_layout.addWidget(self.preview_time)
-        preview_layout.addStretch()
-        preview_layout.addWidget(self.preview_label)
-        preview_layout.addStretch()
-        preview_layout.addWidget(self.preview_ram)
-        
-        layout.addWidget(preview_widget)
-        
-        self.export_path_input = ExportPathInput(
-            controller=self.controller,
-            initial_path=self.controller.get_export_path()
-        )
-        layout.addWidget(self.export_path_input)
-        self.export_path_input.valueChanged.connect(self.controller.set_export_path)
 
 
 ======================================================================
 # src/pik2video/gui/common/__init__.py
 ======================================================================
 
+# src/pik2video/gui/common/__init__.py
+"""
+Общие примитивы GUI.
 
+Содержит:
+- base.py — BaseDialog, BaseFormDialog, SettingsDialog
+- dialogs.py — окна сообщений (confirm / info / warning / error)
+- tooltip.py — CustomToolTip, TooltipButton
+- utils.py — позиционирование окон
+- blink_style.py — цвета и формулы мигания
+- close_policy.py — enum ClosePolicy
+"""
 
 ======================================================================
 # src/pik2video/gui/common/base.py
@@ -3932,8 +3758,8 @@ class ScreenFinalizeWidget(FinalizeWidget):
 
 import logging
 
-from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QSizePolicy, QLabel
-from PySide6.QtCore import Qt, QSize, QEvent, Signal, QObject
+from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QPushButton
+from PySide6.QtCore import Qt, QEvent
 from PySide6.QtGui import QCloseEvent
 from .dialogs import confirm
 from .utils import center_to_parent, keep_window_inside_screen
@@ -4166,165 +3992,6 @@ class SettingsDialog(BaseFormDialog):
 
 
 
-class FinalizeWidget(QWidget):
-    """
-    Базовый виджет финализации.
-    Встраивается в MainWindow, а не отдельное окно.
-    
-    Наследники должны реализовать build_content()
-    """
-    
-    finalize_requested = Signal()   # Сохранить и завершить
-    discard_requested = Signal()    # Удалить без сохранения
-    
-    def __init__(self, parent, controller, title: str = ""):
-        super().__init__(parent)
-        self.controller = controller
-        self.title = title
-        
-        self._build_ui()
-
-        if controller:
-            self.setup_localization()
-
-    def setup_localization(self):
-        """Подключаем систему переводов"""
-        self.translator = self.controller.get_translator()
-        self.translator.language_changed.connect(self.retranslate_ui)
-        self.retranslate_ui()
-        
-    def retranslate_ui(self):
-        """Обновляет тексты на кнопках при смене языка"""
-        if hasattr(self, 'btn_done'):
-            self.btn_done.setText(self.translator.tr("finalize_button"))
-            self.btn_delete.setText(self.translator.tr("discard_button"))
-        
-    def _build_ui(self):
-        """Построение интерфейса"""
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-        
-        self.content_widget = QWidget()
-        self.content_widget.setStyleSheet("""
-            background-color: #2f2f2f;
-            border: 1px solid #444;
-            border-radius: 6px;
-        """)
-        self.content_layout = QVBoxLayout(self.content_widget)
-        self.content_layout.setContentsMargins(12, 12, 12, 12)
-        self.content_layout.setSpacing(12)
-        
-        main_layout.addWidget(self.content_widget)
-        
-        bottom_panel = QWidget()
-        bottom_panel.setFixedHeight(50)
-        bottom_panel.setStyleSheet("background:#282828;")
-        bottom_layout = QHBoxLayout(bottom_panel)
-        bottom_layout.setContentsMargins(8, 8, 8, 8)
-        bottom_layout.setSpacing(10)
-        
-        self.btn_done = QPushButton("")
-        self.btn_done.setFixedSize(160, 32)
-        self.btn_done.setStyleSheet("""
-            QPushButton {
-                background-color: #4a4a4a;
-                border: 1px solid #666;
-                border-radius: 4px;
-                color: #e0e0e0;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #5a5a5a;
-            }
-            QPushButton:pressed {
-                background-color: #3a3a3a;
-            }
-        """)
-        self.btn_done.clicked.connect(self._on_done_clicked)
-        
-        self.btn_delete = QPushButton("")
-        self.btn_delete.setFixedSize(160, 32)
-        self.btn_delete.setStyleSheet("""
-            QPushButton {
-                background-color: #4a4a4a;
-                border: 1px solid #666;
-                border-radius: 4px;
-                color: #e0e0e0;
-            }
-            QPushButton:hover {
-                background-color: #5a5a5a;
-            }
-            QPushButton:pressed {
-                background-color: #3a3a3a;
-            }
-        """)
-        self.btn_delete.clicked.connect(self._on_delete_clicked)
-        
-        
-        bottom_layout.addWidget(self.btn_done)
-        bottom_layout.addStretch()
-
-        stats_widget = QWidget()
-        stats_layout = QVBoxLayout(stats_widget)
-        stats_layout.setContentsMargins(0, 0, 0, 0)
-        stats_layout.setSpacing(2)
-        
-        self.stats_ram = QLabel("RAM: 0 KB")
-        self.stats_ram.setStyleSheet("color: #aaa; font-size: 10px; background: transparent; border: none;")
-        self.stats_ram.setAlignment(Qt.AlignCenter)
-        self.stats_ram.setToolTip("Вес текущего файла")
-        
-        self.stats_time = QLabel("00:00:00")
-        self.stats_time.setStyleSheet("color: #aaa; font-size: 10px; background: transparent; border: none;")
-        self.stats_time.setAlignment(Qt.AlignCenter)
-        self.stats_time.setToolTip("Продолжительность последней записи")
-        
-        stats_layout.addWidget(self.stats_ram)
-        stats_layout.addWidget(self.stats_time)
-        
-        bottom_layout.addWidget(stats_widget)
-
-        bottom_layout.addStretch()
-        bottom_layout.addWidget(self.btn_delete)
-        
-        
-        main_layout.addWidget(bottom_panel)
-    
-    def _on_done_clicked(self):
-        """Пользователь нажал 'готово'"""
-        self.finalize_requested.emit()
-    
-    def _on_delete_clicked(self):
-        """Пользователь нажал 'удалить'"""
-        if confirm(self, "Удалить запись без сохранения?"):
-            self.discard_requested.emit()
-    
-    def build_content(self, layout: QVBoxLayout):
-        """Переопределяется в наследниках для добавления содержимого"""
-        raise NotImplementedError
-
-    def update_stats(self, ram_text: str, time_text: str):
-        """Обновить метки RAM и TIME в финальном окне"""
-        if hasattr(self, 'stats_ram'):
-            self.stats_ram.setText(f"RAM: {ram_text}")
-        if hasattr(self, 'stats_time'):
-            self.stats_time.setText(f"{time_text}")
-
-
-class LocalizedMixin:
-    """Миксин для добавления поддержки переводов"""
-    
-    def setup_localization(self, controller):
-        self.controller = controller
-        self.translator = controller.get_translator()
-        self.translator.language_changed.connect(self.retranslate_ui)
-        self.retranslate_ui()
-    
-    def retranslate_ui(self):
-        """Переопределяется в дочерних классах"""
-        pass
-
 ======================================================================
 # src/pik2video/gui/common/blink_style.py
 ======================================================================
@@ -4376,20 +4043,227 @@ def lerp_color_hex(c1: str, c2: str, t: float) -> str:
 ======================================================================
 
 # src/pik2video/gui/common/close_policy.py
+"""
+Единый центр логики закрытия окон.
 
-from enum import Enum
+Отвечает ТОЛЬКО за одно: по текущему состоянию окна решить,
+что должно произойти при попытке пользователя закрыть окно.
 
+Решения:
+- закрыть молча
+- спросить подтверждение и закрыть
+- отменить закрытие (пользователь передумал)
+- скрыть окно, приложение продолжает работу
+- остановить запись, окно оставить открытым
+- удалить данные сессии и закрыть
+
+Не знает:
+- про Qt (никаких QMessageBox, QWidget, QEvent)
+- про конкретные окна (RecordingWindow, EditorWindow)
+- про AppController
+
+Работает с абстрактным CloseContext и коллбеком ask().
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import Enum, auto
+from typing import Callable, Optional
+
+
+# ─────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────
 
 class ClosePolicy(Enum):
+    """Сценарий закрытия окна."""
 
-    
-    ALLOW = 0                      # окно можно закрыть без подтверждения
+    ALLOW = auto()                     # закрыть без вопросов
+    CONFIRM = auto()                   # всегда спрашивать
+    CONFIRM_IF_RECORDING = auto()      # спросить, если идёт запись
+    CONFIRM_IF_DATA = auto()           # спросить, если есть данные сессии
+    CONFIRM_IF_EXPORTING = auto()      # спросить, если идёт экспорт
+    HIDE_IF_EDITOR_OPEN = auto()       # скрыть, если редактор открыт
+    CANCEL_PREPARING = auto()          # отменить подготовку и закрыть
 
-    CONFIRM = 1                    # требуется подтверждение
 
-    CONFIRM_IF_RECORDING = 2       # подтверждение только во время записи
+# ─────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────
 
-    CONFIRM_IF_REVIEW = 3          # подтверждение если есть результат записи
+class CloseAction(Enum):
+    """Что делать с окном после оценки политики."""
+
+    CLOSE = auto()                     # закрыть окно
+    CANCEL = auto()                    # отменить закрытие, окно остаётся
+    HIDE = auto()                      # скрыть окно, приложение работает
+    STOP_RECORDING = auto()            # остановить запись, окно остаётся
+    DISCARD_AND_CLOSE = auto()         # удалить данные сессии и закрыть
+    CANCEL_EXPORT_AND_CLOSE = auto()   # отменить экспорт и закрыть
+    CANCEL_PREPARING_AND_CLOSE = auto()  # отменить подготовку и закрыть
+
+
+# ─────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────
+
+@dataclass
+class CloseContext:
+    """Факты о состоянии окна/приложения на момент закрытия."""
+
+    is_recording: bool = False
+    is_preparing: bool = False
+    has_data: bool = False
+    is_exporting: bool = False
+    editor_visible: bool = False
+
+
+# ─────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class CloseRule:
+    """
+    Правило одной политики: что показать в диалоге и что делать.
+
+    on_yes  — действие, если пользователь подтвердил
+    on_no   — действие, если пользователь отказался
+    on_skip — действие, если спрашивать не нужно
+              (условие политики не выполнено)
+    """
+
+    text: str = ""
+    title: str = "Подтверждение"
+    yes_label: str = "Да"
+    no_label: str = "Нет"
+
+    on_yes: CloseAction = CloseAction.CLOSE
+    on_no: CloseAction = CloseAction.CANCEL
+    on_skip: CloseAction = CloseAction.CLOSE
+
+
+RULES: dict[ClosePolicy, CloseRule] = {
+
+    ClosePolicy.ALLOW: CloseRule(
+        on_skip=CloseAction.CLOSE,
+    ),
+
+    ClosePolicy.CONFIRM: CloseRule(
+        text="Закрыть окно?",
+        on_yes=CloseAction.CLOSE,
+        on_no=CloseAction.CANCEL,
+    ),
+
+    ClosePolicy.CONFIRM_IF_RECORDING: CloseRule(
+        text=(
+            "Запись будет остановлена.\n"
+            "Файл сохранится и откроется в редакторе."
+        ),
+        title="Остановить запись?",
+        yes_label="Остановить",
+        no_label="Продолжить",
+        on_yes=CloseAction.STOP_RECORDING,
+        on_no=CloseAction.CANCEL,
+        on_skip=CloseAction.CLOSE,
+    ),
+
+    ClosePolicy.CONFIRM_IF_DATA: CloseRule(
+        text="Есть незавершённая запись.\n\nУдалить её без сохранения?",
+        yes_label="Да, удалить",
+        no_label="Нет, остаться",
+        on_yes=CloseAction.DISCARD_AND_CLOSE,
+        on_no=CloseAction.CANCEL,
+        on_skip=CloseAction.CLOSE,
+    ),
+
+    ClosePolicy.CONFIRM_IF_EXPORTING: CloseRule(
+        text="Идёт экспорт видео.\n\nПрервать экспорт и закрыть редактор?",
+        yes_label="Прервать",
+        no_label="Отмена",
+        on_yes=CloseAction.CANCEL_EXPORT_AND_CLOSE,
+        on_no=CloseAction.CANCEL,
+        on_skip=CloseAction.CLOSE,
+    ),
+
+    ClosePolicy.HIDE_IF_EDITOR_OPEN: CloseRule(
+        on_skip=CloseAction.HIDE,
+    ),
+
+    ClosePolicy.CANCEL_PREPARING: CloseRule(
+        on_skip=CloseAction.CANCEL_PREPARING_AND_CLOSE,
+    ),
+}
+
+
+# ─────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────
+
+AskFunc = Callable[[CloseRule], bool]
+
+
+def evaluate_close(
+    policy: ClosePolicy,
+    ctx: CloseContext,
+    ask: Optional[AskFunc] = None,
+) -> CloseAction:
+    """
+    Определить, что делать с окном при попытке закрытия.
+
+    ask — коллбек, показывающий диалог и возвращающий True,
+    если пользователь подтвердил действие.
+
+    Если политика требует подтверждения, а ask не передан —
+    возвращается CANCEL. Консервативное поведение: без диалога
+    не закрываем.
+    """
+    rule = RULES[policy]
+
+    # ── ALLOW ──
+    if policy == ClosePolicy.ALLOW:
+        return rule.on_skip
+
+    # ── CONFIRM ──
+    if policy == ClosePolicy.CONFIRM:
+        return _ask(rule, ask)
+
+    # ── CONFIRM_IF_RECORDING ──
+    if policy == ClosePolicy.CONFIRM_IF_RECORDING:
+        if not ctx.is_recording:
+            return rule.on_skip
+        return _ask(rule, ask)
+
+    # ── CONFIRM_IF_DATA ──
+    if policy == ClosePolicy.CONFIRM_IF_DATA:
+        if not ctx.has_data:
+            return rule.on_skip
+        return _ask(rule, ask)
+
+    # ── CONFIRM_IF_EXPORTING ──
+    if policy == ClosePolicy.CONFIRM_IF_EXPORTING:
+        if not ctx.is_exporting:
+            return rule.on_skip
+        return _ask(rule, ask)
+
+    # ── HIDE_IF_EDITOR_OPEN ──
+    if policy == ClosePolicy.HIDE_IF_EDITOR_OPEN:
+        if ctx.editor_visible:
+            return rule.on_skip
+        return CloseAction.CLOSE
+
+    # ── CANCEL_PREPARING ──
+    if policy == ClosePolicy.CANCEL_PREPARING:
+        if ctx.is_preparing:
+            return rule.on_skip
+        return CloseAction.CLOSE
+
+    return CloseAction.CANCEL
+
+
+def _ask(rule: CloseRule, ask: Optional[AskFunc]) -> CloseAction:
+    """Спросить пользователя, если есть кому спросить."""
+    if ask is None:
+        return CloseAction.CANCEL
+    if ask(rule):
+        return rule.on_yes
+    return rule.on_no
 
 ======================================================================
 # src/pik2video/gui/common/dialogs.py
@@ -4400,33 +4274,43 @@ class ClosePolicy(Enum):
 
 from PySide6.QtWidgets import QMessageBox
 
-def confirm(parent, text: str, title: str = "Подтверждение", translator=None) -> bool:
+
+
+def confirm(
+    parent,
+    text: str,
+    title: str = "Подтверждение",
+    translator=None,
+    yes_label: str = "",
+    no_label: str = "",
+) -> bool:
     """
     Универсальное окно подтверждения.
     Возвращает True если пользователь нажал "Да".
+
+    yes_label / no_label — переопределяют текст кнопок.
+    Если не заданы, берётся из translator или дефолт.
     """
     msg = QMessageBox(parent)
-    
+    msg.setIcon(QMessageBox.Question)
+    msg.setText(text)
+
     if translator:
         msg.setWindowTitle(translator.tr("confirm_title"))
-        msg.setText(text)                    # текст уже должен быть переведен до вызова
-        msg.setIcon(QMessageBox.Question)
-        
-        btn_yes = msg.addButton(translator.tr("confirm_yes"), QMessageBox.YesRole)
-        btn_no = msg.addButton(translator.tr("confirm_no"), QMessageBox.NoRole)
+        default_yes = translator.tr("confirm_yes")
+        default_no = translator.tr("confirm_no")
     else:
         msg.setWindowTitle(title)
-        msg.setText(text)
-        msg.setIcon(QMessageBox.Question)
-        
-        btn_yes = msg.addButton("Да", QMessageBox.YesRole)
-        btn_no = msg.addButton("Нет", QMessageBox.NoRole)
-    
+        default_yes = "Да"
+        default_no = "Нет"
+
+    btn_yes = msg.addButton(yes_label or default_yes, QMessageBox.YesRole)
+    btn_no = msg.addButton(no_label or default_no, QMessageBox.NoRole)
+
     msg.setDefaultButton(btn_no)
     msg.exec()
-    
-    return msg.clickedButton() == btn_yes
 
+    return msg.clickedButton() == btn_yes
 
 def info(parent, text: str, title: str = "Информация", translator=None):
     """
@@ -4601,7 +4485,6 @@ def bottom_right_position(window, screen_geometry: QRect, margin: int = 0) -> QP
     x = screen_geometry.right() - window.width() - margin
     y = screen_geometry.bottom() - window.height() - margin
     return QPoint(x, y)
-
 
 def center_relative_to(parent_geometry: QRect, window) -> QPoint:
     x = parent_geometry.x() + (parent_geometry.width() - window.width()) // 2
@@ -5093,6 +4976,10 @@ class ExportDialog(QDialog):
     def set_progress(self, percent: int):
         self.progress_bar.setValue(percent)
 
+    def is_done(self) -> bool:
+        """Экспорт завершён (успех или ошибка)."""
+        return self._is_done
+
     def show_success(self, output_path: str):
         self._is_done = True
         self._output_path = output_path
@@ -5481,6 +5368,148 @@ class FramePreview(QWidget):
         self.hide()
 
 ======================================================================
+# src/pik2video/gui/editor/global_settings_panel.py
+======================================================================
+
+# src/pik2video/gui/editor/global_settings_panel.py
+"""
+Панель глобальных настроек для встраивания в ToolsPanel.
+
+Отвечает только за:
+- показ виджетов настроек (язык, размер текста, подсказки, всегда сверху)
+- применение изменений в контроллер (сразу, без кнопок)
+
+Не знает:
+- про окно-диалог
+- про другие страницы ToolsPanel
+"""
+
+import logging
+
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
+from PySide6.QtCore import Qt
+
+from src.pik2video.gui.widgets.global_settings import (
+    LanguageSetting,
+    TextSizeSetting,
+    TooltipsSetting,
+    AlwaysOnTopSetting,
+    AutoHideEditorSetting,
+)
+from src.pik2video.gui.common.tooltip import set_tooltips_enabled
+
+logger = logging.getLogger(__name__)
+
+
+class GlobalSettingsPanel(QWidget):
+    """Панель глобальных настроек для встраивания в левую колонку редактора."""
+
+    def __init__(self, controller, parent=None):
+        super().__init__(parent)
+        self.controller = controller
+        self.translator = controller.get_translator()
+
+        self._build_ui()
+        self._apply_localization()
+
+        self.translator.language_changed.connect(self._apply_localization)
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        top = QWidget()
+        top.setStyleSheet("background: transparent; border: none;")
+        top_layout = QVBoxLayout(top)
+        top_layout.setContentsMargins(8, 8, 8, 8)
+        top_layout.setSpacing(8)
+
+        self.title = QLabel("Настройки")
+        self.title.setStyleSheet(
+            "color: #888; font-size: 11px; font-weight: bold; "
+            "background: transparent; border: none;"
+        )
+        top_layout.addWidget(self.title)
+
+        self.language_setting = LanguageSetting(self.controller)
+        self.text_size_setting = TextSizeSetting(self.controller)
+        self.tooltips_setting = TooltipsSetting(self.controller)
+        self.always_on_top_setting = AlwaysOnTopSetting(self.controller)
+        self.auto_hide_setting = AutoHideEditorSetting(self.controller)
+
+        self.row_language = self._make_row(self.language_setting)
+        self.row_text_size = self._make_row(self.text_size_setting)
+        self.row_tooltips = self._make_row(self.tooltips_setting)
+        self.row_always_on_top = self._make_row(self.always_on_top_setting)
+        self.row_auto_hide = self._make_row(self.auto_hide_setting)
+
+        top_layout.addWidget(self.row_language)
+        top_layout.addWidget(self.row_text_size)
+        top_layout.addWidget(self.row_tooltips)
+        top_layout.addWidget(self.row_always_on_top)
+        top_layout.addWidget(self.row_auto_hide)
+        top_layout.addStretch()
+
+        layout.addWidget(top, stretch=1)
+
+        self.language_setting.language_changed.connect(self._on_language_changed)
+        self.text_size_setting.size_changed.connect(self._on_text_size_changed)
+        self.tooltips_setting.toggled.connect(self._on_tooltips_changed)
+        self.always_on_top_setting.toggled.connect(self._on_always_on_top_changed)
+        self.auto_hide_setting.toggled.connect(self._on_auto_hide_changed)
+
+    def _make_row(self, control: QWidget) -> QWidget:
+        """Компактная строка: label слева, control справа."""
+        row = QWidget()
+        row.setStyleSheet("background: transparent; border: none;")
+        row_layout = QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(6)
+
+        label = QLabel("")
+        label.setWordWrap(True)
+        label.setStyleSheet(
+            "color: #ccc; font-size: 11px; background: transparent; border: none;"
+        )
+        row_layout.addWidget(label, stretch=1)
+        row_layout.addWidget(control, stretch=0)
+
+        row._label = label
+        return row
+
+    def _apply_localization(self):
+        """Обновить тексты по текущему языку."""
+        self.title.setText(self.translator.tr("settings"))
+        self.row_language._label.setText(self.translator.tr("language_setting"))
+        self.row_text_size._label.setText(self.translator.tr("text_size_setting"))
+        self.row_tooltips._label.setText(self.translator.tr("show_tooltips"))
+        self.row_always_on_top._label.setText(self.translator.tr("always_on_top"))
+        self.row_auto_hide._label.setText(self.translator.tr("auto_hide_editor"))
+
+
+    def _on_language_changed(self, value: str):
+        self.controller.set_language(value)
+        self.controller.save_settings()
+
+    def _on_text_size_changed(self, value: int):
+        self.controller.set_text_size(value)
+        self.controller.save_settings()
+
+    def _on_tooltips_changed(self, value: bool):
+        self.controller.set_show_tooltips(value)
+        self.controller.save_settings()
+        set_tooltips_enabled(value)
+
+    def _on_always_on_top_changed(self, value: bool):
+        self.controller.set_always_on_top(value)
+        self.controller.save_settings()
+
+    def _on_auto_hide_changed(self, value: bool):
+        self.controller.set_auto_hide_editor(value)
+        self.controller.save_settings()
+
+======================================================================
 # src/pik2video/gui/editor/player.py
 ======================================================================
 
@@ -5537,6 +5566,7 @@ class PlayerWidget(QWidget):
         self._loop_enabled = False
         self._last_frame = None
         self._keep_frames = True   # кэшировать кадры
+        self._pending_play = False  # идёт seek от кнопки ▶
 
         self._stack = QStackedWidget(self)
 
@@ -5834,7 +5864,10 @@ class PlayerWidget(QWidget):
             return
 
         pos = self._player.position() / 1000.0
-        if self._trim_end > 0 and (pos < self._trim_start or pos >= self._trim_end):
+        tolerance = 0.05
+
+        if self._trim_end > 0 and (pos < self._trim_start or pos >= self._trim_end - tolerance):
+            self._pending_play = True
             self._player.setPosition(int(self._trim_start * 1000))
 
         self._player.play()
@@ -5847,6 +5880,13 @@ class PlayerWidget(QWidget):
         )
 
         seconds = ms / 1000.0
+
+        if self._pending_play:
+            if seconds < self._trim_end - 0.05:
+                self._pending_play = False
+            else:
+                self.position_changed.emit(seconds)
+                return
 
         if (
             self._trim_end > 0
@@ -6328,7 +6368,7 @@ class TimelineWidget(QWidget):
 
     def set_duration(self, seconds: float):
         self._duration = max(0.0, seconds)
-        if self._trim_end > self._duration or self._trim_end == 0.0:
+        if self._duration > 0 and self._trim_end > self._duration:
             self._trim_end = self._duration
         self.update()
 
@@ -6337,8 +6377,8 @@ class TimelineWidget(QWidget):
         self.update()
 
     def set_trim(self, start: float, end: float):
-        self._trim_start = max(0.0, min(start, self._duration))
-        self._trim_end = max(self._trim_start, min(end, self._duration))
+        self._trim_start = max(0.0, start)
+        self._trim_end = max(self._trim_start, end)
         self.update()
 
     def get_trim(self) -> tuple:
@@ -7029,6 +7069,9 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+from .global_settings_panel import GlobalSettingsPanel
+
+
 from .tools.format import FormatTool
 from .tools.resolution import ResolutionTool
 from .tools.bitrate import BitrateTool
@@ -7046,9 +7089,10 @@ LABEL_WIDTH = 70
 class ToolsPanel(QFrame):
     """Левая колонка с инструментами и блоком «Информация»."""
 
-    def __init__(self, state, parent=None):
+    def __init__(self, state, controller, parent=None):
         super().__init__(parent)
         self.state = state
+        self.controller = controller
 
         self.setFrameShape(QFrame.NoFrame)
         self.setStyleSheet("""
@@ -7061,6 +7105,16 @@ class ToolsPanel(QFrame):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
+
+        self._stack = QStackedWidget()
+        self._stack.setStyleSheet("background: transparent; border: none;")
+        root.addWidget(self._stack)
+
+        tools_page = QWidget()
+        tools_page.setStyleSheet("background: transparent; border: none;")
+        tools_root = QVBoxLayout(tools_page)
+        tools_root.setContentsMargins(0, 0, 0, 0)
+        tools_root.setSpacing(0)
 
         top = QWidget()
         top.setStyleSheet("background: transparent; border: none;")
@@ -7104,10 +7158,17 @@ class ToolsPanel(QFrame):
         top_layout.addLayout(grid)
         top_layout.addStretch()
 
-        root.addWidget(top, stretch=1)
+        tools_root.addWidget(top, stretch=1)
 
         self.info_block = self._build_info_block()
-        root.addWidget(self.info_block, stretch=0)
+        tools_root.addWidget(self.info_block, stretch=0)
+
+        self._stack.addWidget(tools_page)
+
+        self._settings_panel = GlobalSettingsPanel(self.controller)
+        self._stack.addWidget(self._settings_panel)
+
+        self._stack.setCurrentIndex(0)
 
         self.state.videos_changed.connect(self._update_all)
         self.state.active_video_changed.connect(lambda _: self._update_all())
@@ -7117,6 +7178,14 @@ class ToolsPanel(QFrame):
         self.state.settings_changed.connect(self._update_all)
 
         self._update_all()
+
+    def show_tools(self):
+        """Показать страницу инструментов."""
+        self._stack.setCurrentIndex(0)
+
+    def show_settings(self):
+        """Показать страницу глобальных настроек."""
+        self._stack.setCurrentIndex(1)
 
     def _add_tool(self, grid: QGridLayout, row: int, label_text: str, tool: QWidget):
         """Добавить строку: label + stacked (tool / None)."""
@@ -7843,6 +7912,14 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QPoint, QUrl, Signal
 from PySide6.QtGui import QCloseEvent
 
+from src.pik2video.gui.common.close_policy import (
+    CloseAction,
+    CloseContext,
+    ClosePolicy,
+    CloseRule,
+    evaluate_close,
+)
+from src.pik2video.gui.common.dialogs import confirm
 
 from .state import EditorState
 from .drop_zone import DropZone
@@ -7896,9 +7973,90 @@ class Zone(QFrame):
         label.setWordWrap(True)
         layout.addWidget(label)
 
+class _DimOverlayWindow(QWidget):
+    """Top-level затемнение поверх редактора (кроме топбара). Клик — сигнал."""
+
+    clicked = Signal()
+
+    def __init__(self):
+        super().__init__(
+            None,
+            Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+
+    def paintEvent(self, event):
+        from PySide6.QtGui import QPainter, QColor
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 140))
+
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+
+
+class _RecordMenuWindow(QWidget):
+    """Top-level окно с кнопками записи."""
+
+    record_video_clicked = Signal()
+    record_screen_clicked = Signal()
+    record_audio_clicked = Signal()
+
+    def __init__(self):
+        super().__init__(
+            None,
+            Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #2a2a2a;
+                border: 1px solid #555;
+                border-radius: 6px;
+            }
+        """)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(4)
+
+        btn_style = """
+            QPushButton {
+                background-color: #3a3a3a;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #e0e0e0;
+                padding: 4px 12px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:pressed { background-color: #2a2a2a; }
+        """
+
+        self.btn_video = QPushButton("запись видео")
+        self.btn_video.setFixedHeight(26)
+        self.btn_video.setStyleSheet(btn_style)
+        self.btn_video.clicked.connect(self.record_video_clicked.emit)
+
+        self.btn_screen = QPushButton("скрин запись")
+        self.btn_screen.setFixedHeight(26)
+        self.btn_screen.setStyleSheet(btn_style)
+        self.btn_screen.clicked.connect(self.record_screen_clicked.emit)
+
+        self.btn_audio = QPushButton("запись звука")
+        self.btn_audio.setFixedHeight(26)
+        self.btn_audio.setStyleSheet(btn_style)
+        self.btn_audio.clicked.connect(self.record_audio_clicked.emit)
+
+        layout.addWidget(self.btn_video)
+        layout.addWidget(self.btn_screen)
+        layout.addWidget(self.btn_audio)
+
 
 class EditorWindow(QMainWindow):
-    record_requested = Signal()
+    record_video_requested = Signal()
+    record_screen_requested = Signal()
+    record_audio_requested = Signal()
     closed = Signal()
 
     def __init__(self, controller=None, parent=None):
@@ -7914,6 +8072,14 @@ class EditorWindow(QMainWindow):
 
         self._export_dialog = None
         self._frame_preview = FramePreview()
+
+        self._dim_window = _DimOverlayWindow()
+        self._dim_window.clicked.connect(self._close_record_menu)
+
+        self._menu_window = _RecordMenuWindow()
+        self._menu_window.record_video_clicked.connect(self._on_record_video)
+        self._menu_window.record_screen_clicked.connect(self._on_record_screen)
+        self._menu_window.record_audio_clicked.connect(self._on_record_audio)
 
         self.setWindowTitle("Редактор")
         self.setMinimumSize(1100, 700)
@@ -7943,7 +8109,7 @@ class EditorWindow(QMainWindow):
 
 
     def _build_top_bar(self) -> QWidget:
-        """Верхняя полоска с кнопками."""
+        """Верхняя полоска: [⚙️] слева, [⚫ Запись] справа."""
         bar = QWidget()
         bar.setFixedHeight(TOP_BAR_HEIGHT)
         bar.setStyleSheet("""
@@ -7958,8 +8124,43 @@ class EditorWindow(QMainWindow):
         layout.setContentsMargins(4, 2, 4, 2)
         layout.setSpacing(4)
 
-        self.btn_record = QPushButton("⚫  Запись")
+        btn_toolbar_style = """
+            QPushButton {
+                background-color: #3a3a3a;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #e0e0e0;
+                font-size: 13px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:pressed { background-color: #2a2a2a; }
+            QPushButton:checked {
+                background-color: #5a5a5a;
+                border-color: #888;
+            }
+        """
+
+        self.btn_tools = QPushButton("🛠️")
+        self.btn_tools.setFixedSize(28, 24)
+        self.btn_tools.setCheckable(True)
+        self.btn_tools.setChecked(True)
+        self.btn_tools.setStyleSheet(btn_toolbar_style)
+        self.btn_tools.clicked.connect(self._on_tools_clicked)
+        layout.addWidget(self.btn_tools)
+
+        self.btn_settings = QPushButton("⚙️")
+        self.btn_settings.setFixedSize(28, 24)
+        self.btn_settings.setCheckable(True)
+        self.btn_settings.setStyleSheet(btn_toolbar_style)
+        self.btn_settings.clicked.connect(self._on_settings_clicked)
+        layout.addWidget(self.btn_settings)
+
+
+        layout.addStretch()
+
+        self.btn_record = QPushButton(" ⚫  Запись ")
         self.btn_record.setFixedHeight(24)
+        self.btn_record.setCheckable(True)
         self.btn_record.setStyleSheet("""
             QPushButton {
                 background-color: #3a3a3a;
@@ -7968,20 +8169,19 @@ class EditorWindow(QMainWindow):
                 color: #e0e0e0;
                 padding: 2px 12px;
             }
-            QPushButton:hover {
-                background-color: #4a4a4a;
-            }
-            QPushButton:pressed {
-                background-color: #2a2a2a;
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:pressed { background-color: #2a2a2a; }
+            QPushButton:checked {
+                background-color: #5a5a5a;
+                border-color: #888;
             }
         """)
-        self.btn_record.clicked.connect(self.record_requested.emit)
-
+        self.btn_record.toggled.connect(self._on_record_toggled)
         layout.addWidget(self.btn_record)
-        layout.addStretch()
 
         return bar
 
+    
 
     def _build_drop_area(self) -> QWidget:
         """Зона 4: колонка из двух областей — видео (2/3) и аудио (1/3)."""
@@ -8173,7 +8373,7 @@ class EditorWindow(QMainWindow):
         middle.setContentsMargins(0, 0, 0, 0)
         middle.setSpacing(GAP)
 
-        self.tools_panel = ToolsPanel(self.state)
+        self.tools_panel = ToolsPanel(self.state, self.controller)
         self.tools_panel.setFixedWidth(TOOLS_PANEL_WIDTH)
         middle.addWidget(self.tools_panel)
 
@@ -8232,6 +8432,7 @@ class EditorWindow(QMainWindow):
 
         self.btn_export.setEnabled(self.state.has_videos())
 
+        
 
     def _on_video_dropped(self, path: str):
         """Файл принят в списке видео."""
@@ -8519,19 +8720,139 @@ class EditorWindow(QMainWindow):
         self._frame_preview.hide_preview()
         self.multiplexer.set_keep_frames(False)
 
-    def closeEvent(self, event: QCloseEvent):
-        """Перед закрытием: остановить всё и удалить окно."""
+    def _on_tools_clicked(self):
+        self.tools_panel.show_tools()
+        self.btn_tools.setChecked(True)
+        self.btn_settings.setChecked(False)
+
+    def _on_settings_clicked(self):
+        self.tools_panel.show_settings()
+        self.btn_settings.setChecked(True)
+        self.btn_tools.setChecked(False)
+
+    def _on_record_toggled(self, checked: bool):
+        if checked:
+            self._open_record_menu()
+        else:
+            self._close_record_menu()
+
+
+    def _open_record_menu(self):
+        """Показать затемнение и меню."""
+        editor_top_left = self.mapToGlobal(QPoint(0, 0))
+        top_bar_h = self.top_bar.height()
+
+        self._dim_window.setGeometry(
+            editor_top_left.x(),
+            editor_top_left.y() + top_bar_h,
+            self.width(),
+            self.height() - top_bar_h,
+        )
+        self._dim_window.show()
+
+        self._menu_window.adjustSize()
+        menu_w = self._menu_window.sizeHint().width()
+        menu_h = self._menu_window.sizeHint().height()
+
+        btn_global = self.btn_record.mapToGlobal(QPoint(0, 0))
+        menu_x = btn_global.x() - menu_w - 4
+        menu_y = btn_global.y() + (self.btn_record.height() - menu_h) // 2
+
+        self._menu_window.move(menu_x, menu_y)
+        self._menu_window.show()
+
+        self.btn_settings.setEnabled(False)
+
+    def _close_record_menu(self):
+        """Скрыть затемнение и меню."""
+        self._dim_window.hide()
+        self._menu_window.hide()
+        self.btn_settings.setEnabled(True)
+
+        self.btn_record.blockSignals(True)
+        self.btn_record.setChecked(False)
+        self.btn_record.blockSignals(False)
+
+    def _on_record_video(self):
+        self._close_record_menu()
+        self.record_video_requested.emit()
+
+    def _on_record_screen(self):
+        self._close_record_menu()
+        self.record_screen_requested.emit()
+
+    def _on_record_audio(self):
+        self._close_record_menu()
+        self.record_audio_requested.emit()
+
+    def _pick_policy(self) -> ClosePolicy:
+        """Выбрать политику закрытия по текущему состоянию."""
         if self.export_service.is_running():
-            if self._export_dialog and not self._export_dialog._is_done:
-                from src.pik2video.gui.common.dialogs import confirm
-                if not confirm(
-                    self,
-                    "Идёт экспорт видео.\n\nПрервать экспорт и закрыть редактор?"
-                ):
-                    event.ignore()
-                    return
+            return ClosePolicy.CONFIRM_IF_EXPORTING
+        return ClosePolicy.ALLOW
+
+    def _make_context(self) -> CloseContext:
+        """Собрать факты о состоянии для close_policy."""
+        return CloseContext(
+            is_exporting=self.export_service.is_running(),
+        )
+
+    def _ask(self, rule: CloseRule) -> bool:
+        """Мост между политикой и QMessageBox."""
+        return confirm(
+            self,
+            rule.text,
+            title=rule.title,
+            yes_label=rule.yes_label,
+            no_label=rule.no_label,
+        )
+
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._menu_window.isVisible():
+            self._close_record_menu()
+
+    def moveEvent(self, event):
+        super().moveEvent(event)
+        if self._menu_window.isVisible():
+            self._close_record_menu()
+
+        
+    def closeEvent(self, event: QCloseEvent):
+        """Перед закрытием: решаем политику, чистим ресурсы."""
+        policy = self._pick_policy()
+        ctx = self._make_context()
+        action = evaluate_close(policy, ctx, ask=self._ask)
+
+        logger.debug(f"EditorWindow close: policy={policy.name}, action={action.name}")
+
+        if action == CloseAction.CANCEL:
+            event.ignore()
+            return
+
+        if action == CloseAction.CANCEL_EXPORT_AND_CLOSE:
+            logger.info("Отменяем экспорт и закрываем редактор")
             self.export_service.cancel()
 
+        self._cleanup_aux_windows()
+        self._cleanup_media()
+
+        logger.info("Редактор скрыт (не уничтожен)")
+        self.closed.emit()
+        super().closeEvent(event)
+
+    def _cleanup_aux_windows(self):
+        """Скрыть и освободить вспомогательные top-level окна."""
+        for w in (self._dim_window, self._menu_window):
+            try:
+                w.hide()
+                w.deleteLater()
+            except Exception:
+                pass
+
+    def _cleanup_media(self):
+        """Остановить плеер, скрыть попапы и превью."""
         try:
             self.multiplexer._player.stop()
             self.multiplexer._player.setSource(QUrl())
@@ -8543,17 +8864,12 @@ class EditorWindow(QMainWindow):
             self.multiplexer._volume_control._popup.deleteLater()
         except Exception:
             pass
+
         try:
             self._frame_preview.hide_preview()
             self._frame_preview.deleteLater()
         except Exception:
             pass
-
-        logger.info("Редактор скрыт (не уничтожен)")
-        self.closed.emit()
-        super().closeEvent(event)
-
-
 
 ======================================================================
 # src/pik2video/gui/widgets/__init__.py
@@ -9321,43 +9637,142 @@ class SpeedPresetSelector(QWidget):
 
 # src/pik2video/gui/widgets/global_settings.py
 
+from PySide6.QtWidgets import QComboBox, QSpinBox, QCheckBox, QPushButton, QMenu
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction
 
-from PySide6.QtWidgets import QComboBox, QSpinBox, QCheckBox
-from PySide6.QtCore import Qt
 
-class LanguageSetting(QComboBox):
+
+LANGUAGE_FLAGS = {
+    "Русский": "🇷🇺",
+    "English": "🇺🇸",
+}
+
+TEXT_SIZE_LABELS = {
+    1: "Мелкий",
+    2: "Средний",
+    3: "Крупный",
+}
+
+BTN_WIDTH = 100
+BTN_HEIGHT = 26
+
+
+def _button_style() -> str:
+    return """
+        QPushButton {
+            background-color: #3a3a3a;
+            border: 1px solid #555;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 11px;
+            padding: 2px 8px;
+        }
+        QPushButton:hover { background-color: #4a4a4a; }
+        QPushButton::menu-indicator { image: none; }
     """
-    Виджет выбора языка приложения
+
+
+
+class LanguageSetting(QPushButton):
     """
+    Виджет выбора языка — кнопка с флагом, выезжающее меню.
+    """
+
+    language_changed = Signal(str)  # "Русский" / "English"
+
     def __init__(self, controller):
         super().__init__()
-        self.addItems(["Русский", "English"]) # Добавляем варианты языков
-        self.setCurrentText(controller.get_language())        # Устанавливаем текущий язык из контроллера
-        self.setFixedWidth(100)        # Фиксированная ширина, чтобы не ломалась строка
+        self._current = controller.get_language()
+
+        self.setFixedSize(BTN_WIDTH, BTN_HEIGHT)
+        self.setFocusPolicy(Qt.NoFocus)
+        self.setStyleSheet(_button_style())
+
+        self._menu = QMenu(self)
+        self._menu.setStyleSheet("""
+            QMenu {
+                background-color: #2a2a2a;
+                border: 1px solid #555;
+                color: #e0e0e0;
+            }
+            QMenu::item { padding: 4px 20px; }
+            QMenu::item:selected { background-color: #3a3a3a; }
+        """)
+
+        for lang_name, flag in LANGUAGE_FLAGS.items():
+            action = QAction(f"{flag}  {lang_name}", self)
+            action.triggered.connect(lambda checked=False, n=lang_name: self._select(n))
+            self._menu.addAction(action)
+
+        self.setMenu(self._menu)
+        self._update_text()
+
+    def _update_text(self):
+        flag = LANGUAGE_FLAGS.get(self._current, "🏳️")
+        self.setText(flag)
+
+    def _select(self, lang_name: str):
+        if lang_name == self._current:
+            return
+        self._current = lang_name
+        self._update_text()
+        self.language_changed.emit(lang_name)
+
+    def get_value(self) -> str:
+        return self._current
 
 
-    def get_value(self):
-        return self.currentText()
-
-
-class TextSizeSetting(QSpinBox):
+class TextSizeSetting(QPushButton):
     """
-    Виджет для выбора размера текста
+    Виджет выбора размера текста — кнопка с названием, выезжающее меню.
     """
+
+    size_changed = Signal(int)  # 1 / 2 / 3
+
     def __init__(self, controller):
         super().__init__()
-        self.setRange(1, 3)
-        self.setValue(controller.get_text_size())
-        self.setFixedWidth(30)
+        self._current = controller.get_text_size()
 
-    def get_value(self):
-        return self.value()
+        self.setFixedSize(BTN_WIDTH, BTN_HEIGHT)
+        self.setFocusPolicy(Qt.NoFocus)
+        self.setStyleSheet(_button_style())
+
+        self._menu = QMenu(self)
+        self._menu.setStyleSheet("""
+            QMenu {
+                background-color: #2a2a2a;
+                border: 1px solid #555;
+                color: #e0e0e0;
+            }
+            QMenu::item { padding: 4px 20px; }
+            QMenu::item:selected { background-color: #3a3a3a; }
+        """)
+
+        for size_value, label in TEXT_SIZE_LABELS.items():
+            action = QAction(label, self)
+            action.triggered.connect(lambda checked=False, v=size_value: self._select(v))
+            self._menu.addAction(action)
+
+        self.setMenu(self._menu)
+        self._update_text()
+
+    def _update_text(self):
+        self.setText(TEXT_SIZE_LABELS.get(self._current, "—"))
+
+    def _select(self, value: int):
+        if value == self._current:
+            return
+        self._current = value
+        self._update_text()
+        self.size_changed.emit(value)
+
+    def get_value(self) -> int:
+        return self._current
 
 
 class TooltipsSetting(QCheckBox):
-    """
-    Виджет для включения/выключения подсказок
-    """
+    """Включение/выключение подсказок."""
     def __init__(self, controller):
         super().__init__()
         self.setChecked(controller.get_show_tooltips())
@@ -9366,10 +9781,9 @@ class TooltipsSetting(QCheckBox):
     def get_value(self):
         return self.isChecked()
 
+
 class AlwaysOnTopSetting(QCheckBox):
-    """
-    Виджет для включения/выключения режима "всегда в топе"
-    """
+    """Включение/выключение режима «всегда в топе»."""
     def __init__(self, controller):
         super().__init__()
         self.setChecked(controller.get_always_on_top())
@@ -9378,6 +9792,16 @@ class AlwaysOnTopSetting(QCheckBox):
     def get_value(self):
         return self.isChecked()
 
+
+class AutoHideEditorSetting(QCheckBox):
+    """Автоскрытие редактора при старте записи."""
+    def __init__(self, controller):
+        super().__init__()
+        self.setChecked(controller.get_auto_hide_editor())
+        self.setText("")
+
+    def get_value(self):
+        return self.isChecked()
 
 ======================================================================
 # src/pik2video/gui/widgets/record_settings.py
@@ -9555,11 +9979,9 @@ class SettingRow(QWidget):
 Пакет крупных окон приложения.
 
 Содержит:
-- main.py — MainWindow (IDLE) и AppSettingsDialog
+- recording.py — RecordingWindow (окно записи)
 - ffmpeg_missing.py — FFmpegMissingDialog
 - progress.py — ProgressDialog + InstallationWorker
-
-Замечание: main.py пока содержит два класса. Разбиение на main.py + app_settings.py — отдельный шаг.
 """
 
 ======================================================================
@@ -9776,472 +10198,6 @@ class FFmpegMissingDialog(QDialog):
     def showEvent(self, event):
         self._apply_translations()
         super().showEvent(event)
-
-======================================================================
-# src/pik2video/gui/windows/main.py
-======================================================================
-
-# src/pik2video/gui/windows.py
-
-import logging
-
-from PySide6.QtWidgets import (
-    QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QMainWindow, QComboBox, QCheckBox, QSpinBox, QMessageBox)
-
-from PySide6.QtCore import Qt, Signal, QEvent
-
-from ..widgets.setting_row import SettingRow
-from ..widgets.global_settings import (
-    LanguageSetting,
-    TextSizeSetting,
-    TooltipsSetting,
-    AlwaysOnTopSetting, # импорт нового виджета
-)
-
-from ..common.utils import center_to_parent, keep_window_inside_screen
-from ..common.base import SettingsDialog
-
-from ..capture.sessions import VideoCaptureSession, ScreenCaptureSession
-from ..capture.sessions import VideoFinalizeWidget, ScreenFinalizeWidget
-
-from ..common.tooltip import TooltipButton, set_tooltips_enabled
-
-logger = logging.getLogger(__name__)
-
-''' ГЛАВНОЕ ОКНО '''
-class MainWindow(QMainWindow):
-    window_state_changed = Signal(Qt.WindowStates, Qt.WindowStates)  # oldState, newState
-
-    start_video_requested = Signal()
-    start_screen_requested = Signal()
-    settings_requested = Signal()
-    editor_requested = Signal()
-
-    def __init__(self, controller):
-        super().__init__()
-
-        self.controller = controller
-        self.translator = controller.get_translator()
-        self._title_mode = 'idle'
-        self._editor_visible = False
-
-        self.setWindowFlag(Qt.Window)
-
-        self.setAttribute(Qt.WidgetAttribute.WA_AlwaysShowToolTips, True)
-
-        self.setAttribute(Qt.WA_QuitOnClose, True)
-
-        self.setFixedSize(430, 80)
-
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #282828;
-            }
-
-            QPushButton {
-                background-color: #3a3a3a;
-                border: 1px solid #555;
-                border-radius: 5px;
-                color: #e6e6e6;
-                padding: 0px 0px;
-            }
-
-            QPushButton:hover {
-                background-color: #4a4a4a;
-            }
-
-            QPushButton:pressed {
-                background-color: #2a2a2a;
-            }
-            QPushButton:disabled {
-                color: rgba(255, 255, 255, 80);
-                background-color: #2a2a2a;
-            }
-        """)
-
-        central = QWidget()
-        self.setCentralWidget(central)
-
-        import sys
-        from pathlib import Path
-
-        if getattr(sys, 'frozen', False):
-            base_path = Path(sys._MEIPASS)
-        else:
-            base_path = Path(__file__).resolve().parents[3]
-
-        bg_path = base_path / "resources" / "backgrounds" / "main_bg.png"
-
-        self.root_layout = QVBoxLayout(central)
-        self.root_layout.setContentsMargins(1, 1, 1, 1)
-
-        self.container = QWidget()
-        self.container_layout = QVBoxLayout(self.container)
-        self.container_layout.setContentsMargins(0, 0, 0, 0)
-        self.root_layout.addWidget(self.container)
-
-        self.current_session = None
-
-        self.show_idle_screen()
-
-    def changeEvent(self, event):  # ← новый метод
-        if event.type() == QEvent.WindowStateChange:
-            old_state = event.oldState()
-            new_state = self.windowState()
-            self.window_state_changed.emit(old_state, new_state)
-        super().changeEvent(event)
-
-    # =========================================================
-    # =========================================================
-    def set_screen(self, widget: QWidget):
-        """Удаляет старый экран и ставит новый"""
-        while self.container_layout.count():
-            item = self.container_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
-        self.container_layout.addWidget(widget)
-
-        keep_window_inside_screen(self, margin=20)
-
-    def set_editor_visible(self, visible: bool):
-        """Установить флаг «редактор открыт» и обновить кнопку."""
-        self._editor_visible = visible
-        if hasattr(self, 'btn_editor'):
-            self.btn_editor.setEnabled(not visible)
-
-    # =========================================================
-    # =========================================================
-    def show_idle_screen(self):
-        widget = QWidget()
-
-        import sys
-        from pathlib import Path
-        if getattr(sys, 'frozen', False):
-            base_path = Path(sys._MEIPASS)
-        else:
-            base_path = Path(__file__).resolve().parents[3]
-        bg_path = base_path / "resources" / "backgrounds" / "main_bg.png"
-        if bg_path.exists():
-            widget.setObjectName("idleWidget")
-            widget.setStyleSheet(f"""
-                QWidget#idleWidget {{
-                    background-image: url({bg_path});
-                    background-repeat: no-repeat;
-                }}
-            """)
-        
-        main_layout = QVBoxLayout(widget)
-        main_layout.setContentsMargins(10, 7, 10, 7)
-        main_layout.setSpacing(1)
-
-        W = 170   # ширина широких кнопок
-        S = 30    # ширина маленьких кнопок
-
-        row1 = QHBoxLayout()
-        row1.setSpacing(4)
-
-        self.btn_editor = QPushButton("🔏          редактор")
-        self.btn_editor.setFixedSize(W, 22)
-        self.btn_editor.clicked.connect(self.editor_requested.emit)
-
-        self.btn_record = QPushButton("запись видео")
-        self.btn_record.setFixedSize(W, 22)
-        self.btn_record.clicked.connect(self.start_video_requested.emit)
-
-        self.btn_settings = TooltipButton("⚙️")
-
-        self.btn_settings.setFixedSize(S, 22)
-        self.btn_settings.clicked.connect(self.settings_requested.emit)
-
-        row1.addWidget(self.btn_editor)
-        row1.addWidget(self.btn_record)
-        row1.addStretch()          # 🆕 пустота между кнопками и ⚙️
-        row1.addWidget(self.btn_settings)
-
-        row2 = QHBoxLayout()
-        row2.setSpacing(4)
-
-        self.btn_notify = TooltipButton("📄")
-
-        self.btn_notify.setFixedSize(S, 22)
-
-        self.btn_screen = QPushButton("screen запись")
-        self.btn_screen.setFixedSize(W, 22)
-        self.btn_screen.clicked.connect(self.start_screen_requested.emit)
-
-        self.btn_stream = QPushButton("запись звука     🔏")
-        self.btn_stream.setFixedSize(W, 22)
-        self.btn_stream.setEnabled(False)
-
-        row2.addWidget(self.btn_notify)
-        row2.addStretch()          # 🆕 пустота между 📄 и кнопками
-        row2.addWidget(self.btn_screen)
-        row2.addWidget(self.btn_stream)
-
-        main_layout.addLayout(row1)
-        main_layout.addStretch()
-        main_layout.addLayout(row2)
-
-        self.set_screen(widget)
-        self.current_session = None
-        self.setFixedSize(430,80)
-        self._title_mode = 'idle'
-        self.setup_localization()
-
-    def setup_localization(self):
-        """Подключаем систему переводов"""
-        self.translator.language_changed.connect(self.retranslate_ui)
-        self.retranslate_ui()
-    
-    def retranslate_ui(self):
-        """Обновляет все тексты при смене языка"""
-        logger.debug(f"retranslate_ui вызван, язык: {self.translator.get_current_language()}")
-        self._update_window_title()
-        
-        if hasattr(self, 'btn_record'):
-            self.btn_record.setText(self.translator.tr("record_video"))
-            self.btn_screen.setText(self.translator.tr("screen_capture"))
-            self.btn_stream.setText(self.translator.tr("stream_button"))
-            self.btn_editor.setText(self.translator.tr("editor_button"))
-            self.btn_settings.set_tooltip(self.translator.tr("settings_tooltip"))
-            self.btn_notify.set_tooltip(self.translator.tr("notifications_tooltip"))
-
-    def _update_window_title(self):
-        """Обновляет заголовок окна в зависимости от текущего режима."""
-        if self._title_mode == 'idle':
-            title = self.translator.tr("main_window_title")
-        elif self._title_mode == 'video':
-            title = self.translator.tr("video_recording_title")
-        elif self._title_mode == 'screen':
-            title = self.translator.tr("screen_capture_title")
-        elif self._title_mode == 'finalize_video':
-            title = self.translator.tr("video_finalize_title")
-        elif self._title_mode == 'finalize_screen':
-            title = self.translator.tr("screen_finalize_title")
-        else:
-            title = self.translator.tr("main_window_title")
-        self.setWindowTitle(title)
-
-    # =========================================================
-    # =========================================================
-    def show_video_session(self, controller):
-        """Показать виджет видео записи внутри MainWindow"""
-        from src.pik2video.gui.capture.sessions import VideoCaptureSession
-
-        session = VideoCaptureSession(controller)
-        session.back_requested.connect(controller.cancel_session)
-        self.current_session = session
-
-        session.start_requested.connect(controller.start_recording)
-        session.stop_requested.connect(controller.stop_recording)
-        session.cancel_requested.connect(controller.cancel_session)
-
-        session.time_update_requested.connect(controller.update_time)
-        session.ram_update_requested.connect(controller.update_ram)
-        session.shots_update_requested.connect(controller.update_shots)
-
-        controller.time_updated.connect(session.set_time)
-        controller.ram_updated.connect(session.set_ram)
-        controller.shots_updated.connect(session.set_shots)
-
-        self.set_screen(session)
-        self.setFixedSize(430, 80)  # Размер под виджет
-        self._title_mode = 'video'
-        self._update_window_title()
-
-    # =========================================================
-    # =========================================================
-    def show_screen_session(self, controller):
-        """Показать виджет screen захвата внутри MainWindow"""
-        from src.pik2video.gui.capture.sessions import ScreenCaptureSession
-
-        session = ScreenCaptureSession(controller)
-        session.back_requested.connect(controller.cancel_session)
-        self.current_session = session
-
-        session.start_requested.connect(controller.start_recording)
-        session.stop_requested.connect(controller.stop_recording)
-        session.cancel_requested.connect(controller.cancel_session)
-
-        session.time_update_requested.connect(controller.update_time)
-        session.ram_update_requested.connect(controller.update_ram)
-        session.shots_update_requested.connect(controller.update_shots)
-
-        controller.time_updated.connect(session.set_time)
-        controller.ram_updated.connect(session.set_ram)
-        controller.shots_updated.connect(session.set_shots)
-
-        self.set_screen(session)
-        self.setFixedSize(430, 80)  # Размер под виджет
-
-        keep_window_inside_screen(self)
-
-        self._title_mode = 'screen'
-        self._update_window_title()
-
-    # =========================================================
-    # =========================================================
-    def show_video_finalize(self, controller):
-        """Показать виджет финализации видео внутри MainWindow"""
-        from src.pik2video.gui.capture.sessions import VideoFinalizeWidget
-        
-        finalize = VideoFinalizeWidget(self, controller)
-        finalize.finalize_requested.connect(controller.finalize_session)
-        finalize.discard_requested.connect(controller.discard_session)
-        
-        self.current_session = finalize
-        self.set_screen(finalize)
-        self.setFixedSize(480, 330)  # Размер под виджет
-
-        keep_window_inside_screen(self)
-        self._title_mode = 'finalize_video'
-        self._update_window_title()
-
-    # =========================================================
-    # =========================================================
-    def show_screen_finalize(self, controller):
-        """Показать виджет финализации screen захвата внутри MainWindow"""
-        from src.pik2video.gui.capture.sessions import ScreenFinalizeWidget
-        
-        finalize = ScreenFinalizeWidget(self, controller)
-        finalize.finalize_requested.connect(controller.finalize_session)
-        finalize.discard_requested.connect(controller.discard_session)
-        
-        self.current_session = finalize
-        self.set_screen(finalize)
-        self.setFixedSize(480, 370)  # Размер под виджет
-
-        keep_window_inside_screen(self, margin=20)
-        self._title_mode = 'finalize_screen'
-        self._update_window_title()
-
-    def closeEvent(self, event):
-        """Перехватываем закрытие окна."""
-        logger.debug("вызван closeEvent")
-
-        if self._editor_visible:
-            logger.debug("Редактор открыт → IDLE скрывается")
-            self.hide()
-            event.ignore()
-            return
-
-        if self.controller.is_recording():
-            msg_box = QMessageBox(self)
-            msg_box.setIcon(QMessageBox.Warning)
-            msg_box.setWindowTitle("Остановить запись?")
-            msg_box.setText(
-                "Запись будет остановлена.\n"
-                "Файл сохранится и откроется в редакторе."
-            )
-            msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-            msg_box.button(QMessageBox.Yes).setText("Остановить")
-            msg_box.button(QMessageBox.No).setText("Продолжить")
-            msg_box.setDefaultButton(QMessageBox.No)
-
-            result = msg_box.exec()
-            if result == QMessageBox.Yes:
-                logger.debug("Останавливаем запись → редактор откроется автоматически")
-                self.controller.stop_recording()
-
-            event.ignore()
-            return
-
-        if self.controller.has_active_session_data():
-            translator = self.controller.get_translator()
-            msg_box = QMessageBox(self)
-            msg_box.setIcon(QMessageBox.Warning)
-
-            if translator:
-                msg_box.setWindowTitle(translator.tr("confirm_close_title"))
-                msg_box.setText(translator.tr("confirm_close_message"))
-                msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-                msg_box.button(QMessageBox.Yes).setText(translator.tr("confirm_delete"))
-                msg_box.button(QMessageBox.No).setText(translator.tr("confirm_cancel"))
-            else:
-                msg_box.setWindowTitle("Подтверждение")
-                msg_box.setText("Есть незавершенная запись.\n\nУдалить её без сохранения?")
-                msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-                msg_box.button(QMessageBox.Yes).setText("Да, удалить")
-                msg_box.button(QMessageBox.No).setText("Нет, остаться")
-
-            msg_box.setDefaultButton(QMessageBox.No)
-            result = msg_box.exec()
-
-            if result == QMessageBox.Yes:
-                self.controller.discard_session()
-                event.accept()
-            else:
-                event.ignore()
-            return
-
-        event.accept()
-class AppSettingsDialog(SettingsDialog):
-    def __init__(self, parent, controller):
-        logger.debug(f"AppSettingsDialog.__init__ - controller type: {type(controller)}")
-        SettingsDialog.__init__(self, parent, controller, "app_settings")
-        logger.debug(f"After SettingsDialog init - self.controller type: {type(self.controller)}")
-        
-        self.setup_localization(controller)
-    
-    def setup_localization(self, controller):
-        logger.debug(f"setup_localization - controller type: {type(controller)}")
-        self.controller = controller
-        self.translator = controller.get_translator()
-        self.translator.language_changed.connect(self.retranslate_ui)
-        self.retranslate_ui()  # ← Раскомментируем теперь
-    
-    def build_content(self, layout: QVBoxLayout):
-        self.content_widget.setMinimumWidth(480)
-
-        self.language_setting = LanguageSetting(self.controller)
-        self.text_size_setting = TextSizeSetting(self.controller)
-        self.tooltips_setting = TooltipsSetting(self.controller)
-        self.always_on_top_setting = AlwaysOnTopSetting(self.controller)  # 🆕
-
-        self.row_language = SettingRow("", self.language_setting)
-        self.row_text_size = SettingRow("", self.text_size_setting)
-        self.row_tooltips = SettingRow("", self.tooltips_setting)
-        self.row_always_on_top = SettingRow("", self.always_on_top_setting)  # 🆕
-
-        layout.addWidget(self.row_language)
-        layout.addWidget(self.row_text_size)
-        layout.addWidget(self.row_tooltips)
-        layout.addWidget(self.row_always_on_top)
-    
-    def retranslate_ui(self):
-        """Обновляет тексты при смене языка"""
-        self.setWindowTitle(self.translator.tr("settings"))
-        
-        if hasattr(self, 'row_language'):
-            self.row_language.setText(self.translator.tr("language_setting"))
-            self.row_text_size.setText(self.translator.tr("text_size_setting"))
-            self.row_tooltips.setText(self.translator.tr("show_tooltips"))
-            self.row_always_on_top.setText(self.translator.tr("always_on_top"))  # 🆕
-    
-    def apply_settings(self) -> bool:
-        
-        old_lang = self.controller.get_language()
-        new_lang = self.language_setting.get_value()
-        logger.debug(f"old_lang: {old_lang}, new_lang: {new_lang}")
-        self.controller.set_language(new_lang)
-        self.controller.set_text_size(self.text_size_setting.get_value())
-        self.controller.set_show_tooltips(self.tooltips_setting.get_value())
-        self.controller.set_always_on_top(self.always_on_top_setting.get_value())  # 🆕
-
-        set_tooltips_enabled(self.tooltips_setting.get_value())
-
-        self.controller.save_settings()
-        
-        if old_lang != new_lang:
-            logger.debug("Язык изменился, обновляем translator")
-            lang_code = "ru" if new_lang == "Русский" else "en"
-            logger.debug(f"lang_code: {lang_code}")
-            self.translator.set_language(lang_code)
-        else:
-            logger.debug("Язык не изменился")
-        return True
-
 
 ======================================================================
 # src/pik2video/gui/windows/progress.py
@@ -10492,6 +10448,249 @@ class ProgressDialog(QDialog):
             self.worker.cancel()
             self.worker.wait()
         event.accept()
+
+======================================================================
+# src/pik2video/gui/windows/recording.py
+======================================================================
+
+# src/pik2video/gui/windows/recording.py
+"""
+Окно записи — контейнер для сессий CaptureSession.
+
+Отвечает только за:
+- показ сессии записи (video / screen)
+- обработку закрытия окна
+- уведомление о состоянии редактора
+
+Не знает:
+- про IDLE-экран (удалён)
+- про настройки приложения
+- про финализацию (окна после Стоп)
+"""
+
+import logging
+
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QMainWindow, QMessageBox
+)
+from PySide6.QtCore import Qt, Signal, QEvent
+
+from ..common.utils import keep_window_inside_screen, bottom_right_position
+from ..common.dialogs import confirm
+from ..common.close_policy import (
+    CloseAction,
+    CloseContext,
+    ClosePolicy,
+    CloseRule,
+    evaluate_close,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class RecordingWindow(QMainWindow):
+    """Окно с активной сессией записи."""
+
+    window_state_changed = Signal(Qt.WindowStates, Qt.WindowStates)
+
+    def __init__(self, controller):
+        super().__init__()
+
+        self.controller = controller
+        self._editor_visible = False
+
+        self.setWindowFlag(Qt.Window)
+        self.setAttribute(Qt.WidgetAttribute.WA_AlwaysShowToolTips, True)
+        self.setAttribute(Qt.WA_QuitOnClose, True)
+        self.setFixedSize(430, 80)
+
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #282828;
+            }
+            QPushButton {
+                background-color: #3a3a3a;
+                border: 1px solid #555;
+                border-radius: 5px;
+                color: #e6e6e6;
+                padding: 0px 0px;
+            }
+            QPushButton:hover {
+                background-color: #4a4a4a;
+            }
+            QPushButton:pressed {
+                background-color: #2a2a2a;
+            }
+            QPushButton:disabled {
+                color: rgba(255, 255, 255, 80);
+                background-color: #2a2a2a;
+            }
+        """)
+
+        central = QWidget()
+        self.setCentralWidget(central)
+
+        self.root_layout = QVBoxLayout(central)
+        self.root_layout.setContentsMargins(1, 1, 1, 1)
+
+        self.container = QWidget()
+        self.container_layout = QVBoxLayout(self.container)
+        self.container_layout.setContentsMargins(0, 0, 0, 0)
+        self.root_layout.addWidget(self.container)
+
+        self.current_session = None
+        self._positioned = False
+
+
+    def showEvent(self, event):
+        """При первом показе — расположить в правом нижнем углу."""
+        super().showEvent(event)
+        if not self._positioned:
+            self._position_window()
+            self._positioned = True
+
+    def _position_window(self):
+        """Позиционировать окно в правом нижнем углу экрана."""
+        screen = self.screen().availableGeometry()
+        pos = bottom_right_position(self, screen, margin=117)
+        self.move(pos)
+
+    def changeEvent(self, event):
+        if event.type() == QEvent.WindowStateChange:
+            self.window_state_changed.emit(event.oldState(), self.windowState())
+        super().changeEvent(event)
+
+    def set_screen(self, widget: QWidget):
+        """Удалить старый экран, поставить новый."""
+        while self.container_layout.count():
+            item = self.container_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        self.container_layout.addWidget(widget)
+        keep_window_inside_screen(self, margin=20)
+
+    def set_editor_visible(self, visible: bool):
+        """Уведомление: редактор открыт / скрыт."""
+        self._editor_visible = visible
+
+
+    def show_video_session(self, controller):
+        """Показать видео-сессию записи."""
+        from src.pik2video.gui.capture.sessions import VideoCaptureSession
+
+        session = VideoCaptureSession(controller)
+        session.back_requested.connect(controller.cancel_session)
+        self.current_session = session
+
+        session.start_requested.connect(controller.start_recording)
+        session.stop_requested.connect(controller.stop_recording)
+        session.cancel_requested.connect(controller.cancel_session)
+
+        session.time_update_requested.connect(controller.update_time)
+        session.ram_update_requested.connect(controller.update_ram)
+        session.shots_update_requested.connect(controller.update_shots)
+
+        controller.time_updated.connect(session.set_time)
+        controller.ram_updated.connect(session.set_ram)
+        controller.shots_updated.connect(session.set_shots)
+
+        self.set_screen(session)
+        self.setFixedSize(430, 80)
+
+    def show_screen_session(self, controller):
+        """Показать screen-сессию записи."""
+        from src.pik2video.gui.capture.sessions import ScreenCaptureSession
+
+        session = ScreenCaptureSession(controller)
+        session.back_requested.connect(controller.cancel_session)
+        self.current_session = session
+
+        session.start_requested.connect(controller.start_recording)
+        session.stop_requested.connect(controller.stop_recording)
+        session.cancel_requested.connect(controller.cancel_session)
+
+        session.time_update_requested.connect(controller.update_time)
+        session.ram_update_requested.connect(controller.update_ram)
+        session.shots_update_requested.connect(controller.update_shots)
+
+        controller.time_updated.connect(session.set_time)
+        controller.ram_updated.connect(session.set_ram)
+        controller.shots_updated.connect(session.set_shots)
+
+        self.set_screen(session)
+        self.setFixedSize(430, 80)
+        keep_window_inside_screen(self)
+
+
+    def _pick_policy(self) -> ClosePolicy:
+        """Выбрать политику закрытия по текущему состоянию."""
+        if self.controller.is_recording():
+            return ClosePolicy.CONFIRM_IF_RECORDING
+        if self.controller.is_preparing():
+            return ClosePolicy.CANCEL_PREPARING
+        if self.controller.has_active_session_data():
+            return ClosePolicy.CONFIRM_IF_DATA
+        if self._editor_visible:
+            return ClosePolicy.HIDE_IF_EDITOR_OPEN
+        return ClosePolicy.ALLOW
+
+    def _make_context(self) -> CloseContext:
+        """Собрать факты о состоянии для close_policy."""
+        return CloseContext(
+            is_recording=self.controller.is_recording(),
+            is_preparing=self.controller.is_preparing(),
+            has_data=self.controller.has_active_session_data(),
+            editor_visible=self._editor_visible,
+        )
+
+    def _ask(self, rule: CloseRule) -> bool:
+        """Мост между политикой и QMessageBox."""
+        translator = self.controller.get_translator()
+        return confirm(
+            self,
+            rule.text,
+            title=rule.title,
+            translator=translator,
+            yes_label=rule.yes_label,
+            no_label=rule.no_label,
+        )
+
+    def closeEvent(self, event):
+        """Обработка закрытия окна через close_policy."""
+        logger.debug("RecordingWindow: closeEvent")
+
+        policy = self._pick_policy()
+        ctx = self._make_context()
+        action = evaluate_close(policy, ctx, ask=self._ask)
+
+        logger.debug(f"close_policy: policy={policy.name}, action={action.name}")
+
+        if action == CloseAction.CLOSE:
+            event.accept()
+
+        elif action == CloseAction.HIDE:
+            logger.debug("Скрываем окно, приложение продолжает работу")
+            self.hide()
+            event.ignore()
+
+        elif action == CloseAction.STOP_RECORDING:
+            logger.debug("Останавливаем запись → редактор откроется автоматически")
+            self.controller.stop_recording()
+            event.ignore()
+
+        elif action == CloseAction.DISCARD_AND_CLOSE:
+            logger.debug("Удаляем данные сессии и закрываемся")
+            self.controller.discard_session()
+            event.accept()
+
+        elif action == CloseAction.CANCEL_PREPARING_AND_CLOSE:
+            logger.debug("Отменяем подготовку и закрываемся")
+            self.controller.cancel_session()
+            event.accept()
+
+        else:  # CANCEL
+            event.ignore()
 
 ======================================================================
 # src/pik2video/infrastructure/ffmpeg/__init__.py

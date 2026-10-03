@@ -44,8 +44,8 @@ src/
             windows/
                 __init__.py
                 ffmpeg_missing.py
-                main.py
                 progress.py
+                recording.py
                 __pycache__/
             editor/
                 __init__.py
@@ -53,6 +53,7 @@ src/
                 export_dialog.py
                 export_service.py
                 frame_preview.py
+                global_settings_panel.py
                 player.py
                 state.py
                 timeline.py
@@ -80,7 +81,6 @@ src/
                 setting_row.py
                 __pycache__/
             components_settings/
-                __pycache__/
         application/
             __init__.py
             controller.py
@@ -112,11 +112,6 @@ src/
             logging/
                 __init__.py
                 logger_setup.py
-                __pycache__/
     data/
         drafts/
         tmp/
-            session_20260926_230250/
-            session_20260913_145642/
-            session_20260909_202312/
-            session_20260927_030030/

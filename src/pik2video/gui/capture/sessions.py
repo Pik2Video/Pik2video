@@ -1,33 +1,26 @@
 # src/pik2video/gui/capture/sessions.py
 
-from PySide6.QtWidgets import QWidget, QLabel, QApplication, QHBoxLayout, QVBoxLayout, QSpinBox
-from PySide6.QtCore import Qt, QTimer, QEvent, Signal
-from PySide6.QtGui import QResizeEvent, QCloseEvent
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QSpinBox
+from PySide6.QtCore import Qt, QTimer, Signal
 
 from ..widgets.screen_settings import CapturePerMinuteInput, CleanSpinBox
 from ..widgets.setting_row import SettingRow
 from ..widgets.record_settings import FpsSwitcher
 from ..widgets.common_settings import TimerInput, QualitySwitcher, ExportFilenameInput
 
-from ..widgets.finalize_common_settings import  ExportPathInput, VideoFormatInput, ResolutionSelector, BitrateSelector, RotationSelector  # 🆕
-from ..widgets.finalize_screen_settings import PlaybackFpsInput, SpeedPresetSelector
-
-from src.pik2video.gui.common.dialogs import confirm
-from ..common.utils import center_to_parent, fullscreen_geometry, bring_window_to_front, keep_window_inside_screen
-from ..common.base import SettingsDialog, FinalizeWidget
-from .overlays import CoordinateOverlay
+from ..common.utils import keep_window_inside_screen
+from ..common.base import SettingsDialog
+#from .overlays import CoordinateOverlay
 from .panels import CapturePanel
 
 
 class CaptureSession(QWidget):
-
-    closed_by_user = Signal()
-    back_requested = Signal()
-
     """
     Базовая сессия захвата. Управляет:
     - overlay / состоянием / таймерами / запретом закрытия
     """
+
+    back_requested = Signal()
 
     TIME_INTERVAL = 1000
     RAM_INTERVAL = 1000
@@ -73,15 +66,6 @@ class CaptureSession(QWidget):
         self.time_timer.stop()
         self.ram_timer.stop()
         self.cpu_timer.stop()  # остановка CPU таймера
-
-    def set_waiting_mode(self):
-        """Режим ожидания перед стартом записи"""
-        self.panel.btn_start.setEnabled(False)
-        self.panel.btn_stop.setEnabled(True)
-        self.panel.set_waiting_mode()
-        delay = self.controller.get_start_delay()
-        tr = self.controller.get_translator()
-        self.panel.info_label.setText(f"{tr.tr('info_waiting')} {delay} {tr.tr('seconds')}")
 
     # ───── Обновление UI извне ─────
     def set_time(self, text: str):
@@ -164,33 +148,6 @@ class CaptureSession(QWidget):
 
     def create_settings_dialog(self):
         raise NotImplementedError
-
-    # ───── Qt события ─────
-    def on_before_close(self) -> bool:
-        """
-        Решает, можно ли закрыть окно.
-        PREPARING → без подтверждения.
-        RECORDING → подтверждение.
-        """
-        if self.controller.is_preparing():
-            # просто закрываем окно
-            return True
-
-        if self.controller.is_recording():
-            # показываем окно подтверждения
-            if confirm(
-                self,
-                "Прервать запись?\n\n"
-                "Текущая запись будет остановлена.\n"
-                "Все данные этой сессии будут удалены."
-            ):
-                # Сигналы и действия
-                self.cancel_requested.emit()
-                return True
-            return False
-
-        # для остальных состояний (IDLE и т.д.) можно просто закрыть
-        return True
 
     # ───── Дополнительные сигналы ─────
     time_update_requested = Signal()
@@ -470,206 +427,3 @@ class ScreenSettingsDialog(SettingsDialog):
         self.controller.set_screen_timer(self.timer_input.get_seconds())
         return True
 
-''' ФИНАЛЬНОЕ ОКНО ВИДЕОЗАПИСИ '''
-class VideoFinalizeWidget(FinalizeWidget):
-    """Виджет финализации видео (встраивается в MainWindow)"""
-    
-    def __init__(self, parent, controller):
-        super().__init__(parent, controller, title="")
-        self.build_content(self.content_layout)
-        self.retranslate_ui()
-    
-    def retranslate_ui(self):
-        """Обновляет тексты при смене языка"""
-        super().retranslate_ui()
-        if hasattr(self, 'row_format'):
-            self.row_format.setText(self.translator.tr("video_format"))
-        if hasattr(self, 'row_resolution'):
-            self.row_resolution.setText(self.translator.tr("resolution"))
-        if hasattr(self, 'row_bitrate'):
-            self.row_bitrate.setText(self.translator.tr("bitrate"))
-        if hasattr(self, 'row_rotation'):
-            self.row_rotation.setText(self.translator.tr("rotation"))
-        
-    def build_content(self, layout: QVBoxLayout):
-
-        # 🆕 Формат видео
-        self.video_format_selector = VideoFormatInput(
-            initial=self.controller.get_video_format()
-        )
-        self.row_format = SettingRow("", self.video_format_selector)
-        layout.addWidget(self.row_format)
-        self.video_format_selector.valueChanged.connect(self.controller.set_video_format)
-
-        # 🆕 Разрешение
-        self.resolution_selector = ResolutionSelector(
-            initial=self.controller.get_resolution()
-        )
-        self.row_resolution = SettingRow("", self.resolution_selector)
-        layout.addWidget(self.row_resolution)
-        self.resolution_selector.valueChanged.connect(self.controller.set_resolution)
-        
-        # 🆕 Битрейт
-        self.bitrate_selector = BitrateSelector(
-            mode=self.controller.get_bitrate_mode(),
-            value=self.controller.get_bitrate_value()
-        )
-        self.row_bitrate = SettingRow("", self.bitrate_selector)
-        layout.addWidget(self.row_bitrate)
-        self.bitrate_selector.valueChanged.connect(self.controller.set_bitrate)
-        
-        # 🆕 Поворот
-        self.rotation_selector = RotationSelector(
-            initial=self.controller.get_rotation()
-        )
-        self.row_rotation = SettingRow("", self.rotation_selector)
-        layout.addWidget(self.row_rotation)
-        self.rotation_selector.valueChanged.connect(self.controller.set_rotation)
-
-
-        # 🆕 Живые метки (предпросмотр при экспорте)
-        preview_widget = QWidget()
-        preview_layout = QHBoxLayout(preview_widget)
-        preview_layout.setContentsMargins(20, 0, 20, 0)
-        preview_layout.setSpacing(10)
-        
-        self.preview_time = QLabel("TIME: --:--:--")
-        self.preview_time.setStyleSheet("color: #ccc; font-size: 12px; background: transparent; border: none;")
-        self.preview_time.setAlignment(Qt.AlignCenter)
-        
-        self.preview_label = QLabel("  значения при экспорте   ")
-        self.preview_label.setStyleSheet("color: #888; font-size: 11px; background: transparent; border: none;")
-        self.preview_label.setAlignment(Qt.AlignCenter)
-        
-        self.preview_ram = QLabel("RAM: --")
-        self.preview_ram.setStyleSheet("color: #ccc; font-size: 12px; background: transparent; border: none;")
-        self.preview_ram.setAlignment(Qt.AlignCenter)
-        
-        
-        preview_layout.addWidget(self.preview_time)
-        preview_layout.addStretch()
-        preview_layout.addWidget(self.preview_label)
-        preview_layout.addStretch()
-        preview_layout.addWidget(self.preview_ram)
-        
-        layout.addWidget(preview_widget)
-
-        # Путь сохранения
-        self.export_path_input = ExportPathInput(
-            controller=self.controller,
-            initial_path=self.controller.get_export_path()
-        )
-        layout.addWidget(self.export_path_input)
-        self.export_path_input.valueChanged.connect(self.controller.set_export_path)
-
-''' ФИНАЛЬНОЕ ОКНО СЕРИЙНОГО ЗАХВАТА '''
-class ScreenFinalizeWidget(FinalizeWidget):
-    """Виджет финализации screen захвата (встраивается в MainWindow)"""
-    
-    def __init__(self, parent, controller):
-        super().__init__(parent, controller, title="")
-        self.build_content(self.content_layout)
-
-        self.retranslate_ui()
-    
-    def retranslate_ui(self):
-        """Обновляет тексты при смене языка"""
-        # Обновляем кнопки через родительский метод
-        super().retranslate_ui()
-        
-        # Обновляем свои строки
-        if hasattr(self, 'row_format'):
-            self.row_format.setText(self.translator.tr("video_format"))
-        if hasattr(self, 'row_fps'):
-            self.row_fps.setText(self.translator.tr("playback_fps"))
-
-        if hasattr(self, 'row_speed'):
-            self.row_speed.setText(self.translator.tr("playback_speed"))
-
-        if hasattr(self, 'row_resolution'):
-            self.row_resolution.setText(self.translator.tr("resolution"))
-        if hasattr(self, 'row_bitrate'):
-            self.row_bitrate.setText(self.translator.tr("bitrate"))
-        if hasattr(self, 'row_rotation'):
-            self.row_rotation.setText(self.translator.tr("rotation"))
-        
-    def build_content(self, layout: QVBoxLayout):
-        # формат видео
-        self.video_format_selector = VideoFormatInput(
-            initial="GIF"
-        )
-        self.row_format = SettingRow("", self.video_format_selector)
-        layout.addWidget(self.row_format)
-        self.video_format_selector.valueChanged.connect(self.controller.set_video_format)
-
-        # 🆕 Разрешение
-        self.resolution_selector = ResolutionSelector(
-            initial=self.controller.get_resolution()
-        )
-        self.row_resolution = SettingRow("", self.resolution_selector)
-        layout.addWidget(self.row_resolution)
-        self.resolution_selector.valueChanged.connect(self.controller.set_resolution)
-        
-        # 🆕 Битрейт
-        self.bitrate_selector = BitrateSelector(
-            mode=self.controller.get_bitrate_mode(),
-            value=self.controller.get_bitrate_value()
-        )
-        self.row_bitrate = SettingRow("", self.bitrate_selector)
-        layout.addWidget(self.row_bitrate)
-        self.bitrate_selector.valueChanged.connect(self.controller.set_bitrate)
-        
-        # 🆕 Поворот
-        self.rotation_selector = RotationSelector(
-            initial=self.controller.get_rotation()
-        )
-        self.row_rotation = SettingRow("", self.rotation_selector)
-        layout.addWidget(self.row_rotation)
-        self.rotation_selector.valueChanged.connect(self.controller.set_rotation)
-
-        # виджет FPS воспроизведения
-        self.playback_fps = PlaybackFpsInput(
-            initial=self.controller.get_screen_finalize_fps()
-        )
-        self.row_fps = SettingRow("", self.playback_fps)
-        layout.addWidget(self.row_fps)
-        self.playback_fps.valueChanged.connect(self.controller.set_screen_finalize_fps)
-
-        # 🆕 Пресеты скорости (под FPS сборки)
-        self.speed_preset = SpeedPresetSelector()
-        self.row_speed = SettingRow("", self.speed_preset)
-        layout.addWidget(self.row_speed)
-        self.speed_preset.valueChanged.connect(self.controller.set_speed_multiplier)
-
-        # 🆕 Живые метки (предпросмотр при экспорте)
-        preview_widget = QWidget()
-        preview_layout = QHBoxLayout(preview_widget)
-        preview_layout.setContentsMargins(20, 0, 20, 0)
-        preview_layout.setSpacing(10)
-        
-        self.preview_time = QLabel("TIME: --:--:--")
-        self.preview_time.setStyleSheet("color: #ccc; font-size: 12px; background: transparent; border: none;")
-        self.preview_time.setAlignment(Qt.AlignCenter)
-        
-        self.preview_label = QLabel("  значения при экспорте   ")
-        self.preview_label.setStyleSheet("color: #888; font-size: 11px; background: transparent; border: none;")
-        self.preview_label.setAlignment(Qt.AlignCenter)
-        
-        self.preview_ram = QLabel("RAM: --")
-        self.preview_ram.setStyleSheet("color: #ccc; font-size: 12px; background: transparent; border: none;")
-        self.preview_ram.setAlignment(Qt.AlignCenter)
-        
-        preview_layout.addWidget(self.preview_time)
-        preview_layout.addStretch()
-        preview_layout.addWidget(self.preview_label)
-        preview_layout.addStretch()
-        preview_layout.addWidget(self.preview_ram)
-        
-        layout.addWidget(preview_widget)
-        
-        self.export_path_input = ExportPathInput(
-            controller=self.controller,
-            initial_path=self.controller.get_export_path()
-        )
-        layout.addWidget(self.export_path_input)
-        self.export_path_input.valueChanged.connect(self.controller.set_export_path)

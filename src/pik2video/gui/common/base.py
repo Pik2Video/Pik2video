@@ -2,11 +2,20 @@
 
 import logging
 
-from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QSizePolicy, QLabel
-from PySide6.QtCore import Qt, QSize, QEvent, Signal, QObject
+from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QPushButton
+from PySide6.QtCore import Qt, QEvent
 from PySide6.QtGui import QCloseEvent
 from .dialogs import confirm
 from .utils import center_to_parent, keep_window_inside_screen
+
+from .close_policy import (
+    CloseAction,
+    CloseContext,
+    ClosePolicy,
+    CloseRule,
+    evaluate_close,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -52,43 +61,41 @@ class BaseDialog(QDialog):
 
     
     def closeEvent(self, event: QCloseEvent):
+        action = evaluate_close(
+            self.get_close_policy(),
+            self.make_close_context(),
+            ask=self._ask,
+        )
 
-        # Проверяем: можно ли вообще закрывать
-        if not self.can_close():
-            event.ignore()  # отменяем закрытие
-            return
-
-        # Нужно ли подтверждение (например "Вы уверены?")
-        if self.requires_confirmation_on_close() and not confirm(self, "Вы уверены?"):
+        if action == CloseAction.CLOSE:
+            event.accept()
+            self.on_closed()
+        else:
             event.ignore()
-            return
 
-        # Хук перед закрытием (может отменить закрытие)
-        if not self.on_before_close():
-            event.ignore()
-            return
+    # ─────────── Расширяемые точки ───────────
 
-        # Если всё ок — закрываем
-        event.accept()
+    def get_close_policy(self) -> ClosePolicy:
+        """Политика закрытия. Переопределяется в наследниках."""
+        return ClosePolicy.ALLOW
 
-        self.on_after_close()
+    def make_close_context(self) -> CloseContext:
+        """Факты о состоянии для close_policy. Переопределяется при необходимости."""
+        return CloseContext()
 
+    def _ask(self, rule: CloseRule) -> bool:
+        """Мост между политикой и QMessageBox."""
+        return confirm(
+            self,
+            rule.text,
+            title=rule.title,
+            translator=getattr(self, "translator", None),
+            yes_label=rule.yes_label,
+            no_label=rule.no_label,
+        )
 
-    def can_close(self) -> bool:
-        # Можно ли закрыть окно (по умолчанию — да)
-        return True
-
-    def requires_confirmation_on_close(self) -> bool:
-        # Нужно ли спрашивать подтверждение
-        return False
-
-    def on_before_close(self) -> bool:
-        # Вызывается перед закрытием
-        # Если вернуть False — окно НЕ закроется
-        return True
-
-    def on_after_close(self):
-        # Вызывается после закрытия
+    def on_closed(self):
+        """Хук после успешного закрытия. Переопределяется в наследниках."""
         pass
 
 
@@ -277,174 +284,3 @@ class SettingsDialog(BaseFormDialog):
         # Метод для применения настроек (переопределяется)
         return True
 
-    def requires_confirmation_on_close(self) -> bool:
-        # В этом окне не нужно подтверждение при закрытии
-        return False
-
-
-# финальное окно
-
-class FinalizeWidget(QWidget):
-    """
-    Базовый виджет финализации.
-    Встраивается в MainWindow, а не отдельное окно.
-    
-    Наследники должны реализовать build_content()
-    """
-    
-    finalize_requested = Signal()   # Сохранить и завершить
-    discard_requested = Signal()    # Удалить без сохранения
-    
-    def __init__(self, parent, controller, title: str = ""):
-        super().__init__(parent)
-        self.controller = controller
-        self.title = title
-        
-        self._build_ui()
-
-        # Подключаем перевод для кнопок
-        if controller:
-            self.setup_localization()
-
-    def setup_localization(self):
-        """Подключаем систему переводов"""
-        self.translator = self.controller.get_translator()
-        self.translator.language_changed.connect(self.retranslate_ui)
-        self.retranslate_ui()
-        
-    def retranslate_ui(self):
-        """Обновляет тексты на кнопках при смене языка"""
-        if hasattr(self, 'btn_done'):
-            self.btn_done.setText(self.translator.tr("finalize_button"))
-            self.btn_delete.setText(self.translator.tr("discard_button"))
-        
-    def _build_ui(self):
-        """Построение интерфейса"""
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-        
-        # Контент (заполняется в наследниках)
-        self.content_widget = QWidget()
-        self.content_widget.setStyleSheet("""
-            background-color: #2f2f2f;
-            border: 1px solid #444;
-            border-radius: 6px;
-        """)
-        self.content_layout = QVBoxLayout(self.content_widget)
-        self.content_layout.setContentsMargins(12, 12, 12, 12)
-        self.content_layout.setSpacing(12)
-        
-        main_layout.addWidget(self.content_widget)
-        
-        # Нижняя панель с кнопками
-        bottom_panel = QWidget()
-        bottom_panel.setFixedHeight(50)
-        bottom_panel.setStyleSheet("background:#282828;")
-        bottom_layout = QHBoxLayout(bottom_panel)
-        bottom_layout.setContentsMargins(8, 8, 8, 8)
-        bottom_layout.setSpacing(10)
-        
-        # Кнопка "готово" (сохранить)
-        self.btn_done = QPushButton("")
-        self.btn_done.setFixedSize(160, 32)
-        self.btn_done.setStyleSheet("""
-            QPushButton {
-                background-color: #4a4a4a;
-                border: 1px solid #666;
-                border-radius: 4px;
-                color: #e0e0e0;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #5a5a5a;
-            }
-            QPushButton:pressed {
-                background-color: #3a3a3a;
-            }
-        """)
-        self.btn_done.clicked.connect(self._on_done_clicked)
-        
-        # Кнопка "удалить" (отменить)
-        self.btn_delete = QPushButton("")
-        self.btn_delete.setFixedSize(160, 32)
-        self.btn_delete.setStyleSheet("""
-            QPushButton {
-                background-color: #4a4a4a;
-                border: 1px solid #666;
-                border-radius: 4px;
-                color: #e0e0e0;
-            }
-            QPushButton:hover {
-                background-color: #5a5a5a;
-            }
-            QPushButton:pressed {
-                background-color: #3a3a3a;
-            }
-        """)
-        self.btn_delete.clicked.connect(self._on_delete_clicked)
-        
-        
-        bottom_layout.addWidget(self.btn_done)
-        bottom_layout.addStretch()
-
-        # 🆕 Метки RAM и TIME между кнопками
-        stats_widget = QWidget()
-        stats_layout = QVBoxLayout(stats_widget)
-        stats_layout.setContentsMargins(0, 0, 0, 0)
-        stats_layout.setSpacing(2)
-        
-        self.stats_ram = QLabel("RAM: 0 KB")
-        self.stats_ram.setStyleSheet("color: #aaa; font-size: 10px; background: transparent; border: none;")
-        self.stats_ram.setAlignment(Qt.AlignCenter)
-        self.stats_ram.setToolTip("Вес текущего файла")
-        
-        self.stats_time = QLabel("00:00:00")
-        self.stats_time.setStyleSheet("color: #aaa; font-size: 10px; background: transparent; border: none;")
-        self.stats_time.setAlignment(Qt.AlignCenter)
-        self.stats_time.setToolTip("Продолжительность последней записи")
-        
-        stats_layout.addWidget(self.stats_ram)
-        stats_layout.addWidget(self.stats_time)
-        
-        bottom_layout.addWidget(stats_widget)
-
-        bottom_layout.addStretch()
-        bottom_layout.addWidget(self.btn_delete)
-        
-        
-        main_layout.addWidget(bottom_panel)
-    
-    def _on_done_clicked(self):
-        """Пользователь нажал 'готово'"""
-        self.finalize_requested.emit()
-    
-    def _on_delete_clicked(self):
-        """Пользователь нажал 'удалить'"""
-        if confirm(self, "Удалить запись без сохранения?"):
-            self.discard_requested.emit()
-    
-    def build_content(self, layout: QVBoxLayout):
-        """Переопределяется в наследниках для добавления содержимого"""
-        raise NotImplementedError
-
-    def update_stats(self, ram_text: str, time_text: str):
-        """Обновить метки RAM и TIME в финальном окне"""
-        if hasattr(self, 'stats_ram'):
-            self.stats_ram.setText(f"RAM: {ram_text}")
-        if hasattr(self, 'stats_time'):
-            self.stats_time.setText(f"{time_text}")
-
-
-class LocalizedMixin:
-    """Миксин для добавления поддержки переводов"""
-    
-    def setup_localization(self, controller):
-        self.controller = controller
-        self.translator = controller.get_translator()
-        self.translator.language_changed.connect(self.retranslate_ui)
-        self.retranslate_ui()
-    
-    def retranslate_ui(self):
-        """Переопределяется в дочерних классах"""
-        pass

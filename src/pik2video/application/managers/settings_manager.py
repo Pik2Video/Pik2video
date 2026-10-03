@@ -16,7 +16,12 @@ from typing import Optional
 from PySide6.QtCore import QObject
 
 from ..settings_model import SettingsModel
+
+from src.pik2video.locale.languages import code_from_display_name
 from src.pik2video.locale.translator import Translator
+from src.pik2video.locale.languages import code_from_display_name
+
+
 from ..session_types import SessionType
 
 logger = logging.getLogger(__name__)
@@ -38,8 +43,7 @@ class SettingsManager(QObject):
         # Создаём переводчик и устанавливаем язык из настроек
         self.translator = Translator()
         current_lang = self.settings.global_settings.language
-        lang_code = "ru" if current_lang == "Русский" else "en"
-        self.translator.set_language(lang_code)
+        self.translator.set_language(code_from_display_name(current_lang))
 
         logger.debug("SettingsManager инициализирован")
 
@@ -66,8 +70,7 @@ class SettingsManager(QObject):
     def _apply_language(self):
         """Применить текущий язык из настроек к Translator"""
         lang = self.settings.global_settings.language
-        lang_code = "ru" if lang == "Русский" else "en"
-        self.translator.set_language(lang_code)
+        self.translator.set_language(code_from_display_name(lang))
 
     # ---------- Глобальные настройки ----------
 
@@ -117,6 +120,7 @@ class SettingsManager(QObject):
     # ---------- Настройки записи видео (Record) ----------
 
     def get_record_fps(self) -> int:
+        
         return self.settings.record.fps
 
     def set_record_fps(self, fps: int):

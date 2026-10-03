@@ -22,6 +22,14 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QPoint, QUrl, Signal
 from PySide6.QtGui import QCloseEvent
 
+from src.pik2video.gui.common.close_policy import (
+    CloseAction,
+    CloseContext,
+    ClosePolicy,
+    CloseRule,
+    evaluate_close,
+)
+from src.pik2video.gui.common.dialogs import confirm
 
 from .state import EditorState
 from .drop_zone import DropZone
@@ -915,6 +923,28 @@ class EditorWindow(QMainWindow):
         self._close_record_menu()
         self.record_audio_requested.emit()
 
+    def _pick_policy(self) -> ClosePolicy:
+        """Выбрать политику закрытия по текущему состоянию."""
+        if self.export_service.is_running():
+            return ClosePolicy.CONFIRM_IF_EXPORTING
+        return ClosePolicy.ALLOW
+
+    def _make_context(self) -> CloseContext:
+        """Собрать факты о состоянии для close_policy."""
+        return CloseContext(
+            is_exporting=self.export_service.is_running(),
+        )
+
+    def _ask(self, rule: CloseRule) -> bool:
+        """Мост между политикой и QMessageBox."""
+        return confirm(
+            self,
+            rule.text,
+            title=rule.title,
+            yes_label=rule.yes_label,
+            no_label=rule.no_label,
+        )
+
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -926,53 +956,55 @@ class EditorWindow(QMainWindow):
         if self._menu_window.isVisible():
             self._close_record_menu()
 
+        
     def closeEvent(self, event: QCloseEvent):
-        """Перед закрытием: остановить всё и удалить окно."""
+        """Перед закрытием: решаем политику, чистим ресурсы."""
+        policy = self._pick_policy()
+        ctx = self._make_context()
+        action = evaluate_close(policy, ctx, ask=self._ask)
 
-        # Закрываем top-level окна
-        try:
-            self._dim_window.hide()
-            self._dim_window.deleteLater()
-        except Exception:
-            pass
-        try:
-            self._menu_window.hide()
-            self._menu_window.deleteLater()
-        except Exception:
-            pass
+        logger.debug(f"EditorWindow close: policy={policy.name}, action={action.name}")
 
-        # 1. Экспорт
-        if self.export_service.is_running():
-            if self._export_dialog and not self._export_dialog._is_done:
-                from src.pik2video.gui.common.dialogs import confirm
-                if not confirm(
-                    self,
-                    "Идёт экспорт видео.\n\nПрервать экспорт и закрыть редактор?"
-                ):
-                    event.ignore()
-                    return
+        if action == CloseAction.CANCEL:
+            event.ignore()
+            return
+
+        if action == CloseAction.CANCEL_EXPORT_AND_CLOSE:
+            logger.info("Отменяем экспорт и закрываем редактор")
             self.export_service.cancel()
 
-        # 2. Плеер
+        self._cleanup_aux_windows()
+        self._cleanup_media()
+
+        logger.info("Редактор скрыт (не уничтожен)")
+        self.closed.emit()
+        super().closeEvent(event)
+
+    def _cleanup_aux_windows(self):
+        """Скрыть и освободить вспомогательные top-level окна."""
+        for w in (self._dim_window, self._menu_window):
+            try:
+                w.hide()
+                w.deleteLater()
+            except Exception:
+                pass
+
+    def _cleanup_media(self):
+        """Остановить плеер, скрыть попапы и превью."""
         try:
             self.multiplexer._player.stop()
             self.multiplexer._player.setSource(QUrl())
         except Exception as e:
             logger.warning(f"Не удалось остановить плеер: {e}")
 
-        # 3. Всплывающие окна
         try:
             self.multiplexer._volume_control._popup.hide()
             self.multiplexer._volume_control._popup.deleteLater()
         except Exception:
             pass
+
         try:
             self._frame_preview.hide_preview()
             self._frame_preview.deleteLater()
         except Exception:
             pass
-
-        logger.info("Редактор скрыт (не уничтожен)")
-        self.closed.emit()
-        super().closeEvent(event)
-

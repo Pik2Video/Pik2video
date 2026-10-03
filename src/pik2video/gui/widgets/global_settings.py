@@ -4,13 +4,13 @@ from PySide6.QtWidgets import QComboBox, QSpinBox, QCheckBox, QPushButton, QMenu
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
 
+from src.pik2video.locale.languages import (
+    AVAILABLE_LANGUAGES,
+    code_from_display_name,
+    flag_from_code,
+)
 
 # ── Константы ──
-
-LANGUAGE_FLAGS = {
-    "Русский": "🇷🇺",
-    "English": "🇺🇸",
-}
 
 TEXT_SIZE_LABELS = {
     1: "Мелкий",
@@ -65,17 +65,18 @@ class LanguageSetting(QPushButton):
             QMenu::item:selected { background-color: #3a3a3a; }
         """)
 
-        for lang_name, flag in LANGUAGE_FLAGS.items():
-            action = QAction(f"{flag}  {lang_name}", self)
-            action.triggered.connect(lambda checked=False, n=lang_name: self._select(n))
+        for code, name in AVAILABLE_LANGUAGES.items():
+            flag = flag_from_code(code)
+            action = QAction(f"{flag}  {name}", self)
+            action.triggered.connect(lambda checked=False, n=name: self._select(n))
             self._menu.addAction(action)
 
         self.setMenu(self._menu)
         self._update_text()
 
     def _update_text(self):
-        flag = LANGUAGE_FLAGS.get(self._current, "🏳️")
-        self.setText(flag)
+        code = code_from_display_name(self._current)
+        self.setText(flag_from_code(code))
 
     def _select(self, lang_name: str):
         if lang_name == self._current:
@@ -86,7 +87,6 @@ class LanguageSetting(QPushButton):
 
     def get_value(self) -> str:
         return self._current
-
 
 class TextSizeSetting(QPushButton):
     """

@@ -10,9 +10,8 @@ import logging
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt, QObject, QEvent
 from src.pik2video.application.controller import AppController
-from src.pik2video.gui.windows.main import MainWindow
+from src.pik2video.gui.windows.recording import RecordingWindow
 from src.pik2video.gui.windows.ffmpeg_missing import FFmpegMissingDialog
-from src.pik2video.gui.common.utils import bottom_right_position
 from src.pik2video.gui.common.tooltip import set_tooltips_enabled, is_tooltips_enabled
 from .blink_manager import BlinkManager
 from .window_manager import WindowManager
@@ -31,7 +30,6 @@ from PySide6.QtCore import QObject, Qt, Slot
 from src.pik2video.application.session_types import SessionType
 from src.pik2video.application.state_machine import AppState
 from src.pik2video.gui.capture.preset_window import PresetWindow
-from src.pik2video.gui.common.utils import bring_window_to_front
 from src.pik2video.utils import format_size, format_time
 from .window_manager import WindowManager
 from .blink_manager import BlinkManager
@@ -156,24 +154,25 @@ from ..widgets.screen_settings import CapturePerMinuteInput, CleanSpinBox
 from ..widgets.setting_row import SettingRow
 from ..widgets.record_settings import FpsSwitcher
 from ..widgets.common_settings import TimerInput, QualitySwitcher, ExportFilenameInput
-from ..widgets.finalize_common_settings import  ExportPathInput, VideoFormatInput, ResolutionSelector, BitrateSelector, RotationSelector  # 🆕
-from ..widgets.finalize_screen_settings import PlaybackFpsInput, SpeedPresetSelector
 from src.pik2video.gui.common.dialogs import confirm
 from ..common.utils import center_to_parent, fullscreen_geometry, bring_window_to_front, keep_window_inside_screen
-from ..common.base import SettingsDialog, FinalizeWidget
+from ..common.base import SettingsDialog
 from .overlays import CoordinateOverlay
 from .panels import CapturePanel
 
 # src/pik2video/gui/common/base.py
 import logging
-from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QFrame, QSizePolicy, QLabel
-from PySide6.QtCore import Qt, QSize, QEvent, Signal, QObject
+from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QPushButton
+from PySide6.QtCore import Qt, QEvent
 from PySide6.QtGui import QCloseEvent
 from .dialogs import confirm
 from .utils import center_to_parent, keep_window_inside_screen
 
 # src/pik2video/gui/common/close_policy.py
-from enum import Enum
+from __future__ import annotations
+from dataclasses import dataclass
+from enum import Enum, auto
+from typing import Callable, Optional
 
 # src/pik2video/gui/common/dialogs.py
 from PySide6.QtWidgets import QMessageBox
@@ -226,6 +225,13 @@ from .state import EditorState
 import logging
 from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QApplication
 from PySide6.QtCore import Qt, QPoint
+
+# src/pik2video/gui/editor/global_settings_panel.py
+import logging
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
+from PySide6.QtCore import Qt
+from src.pik2video.gui.widgets.global_settings import (
+from src.pik2video.gui.common.tooltip import set_tooltips_enabled
 
 # src/pik2video/gui/editor/player.py
 import logging
@@ -289,6 +295,7 @@ import logging
 from datetime import timedelta
 from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
+from .global_settings_panel import GlobalSettingsPanel
 from .tools.format import FormatTool
 from .tools.resolution import ResolutionTool
 from .tools.bitrate import BitrateTool
@@ -314,6 +321,8 @@ from pathlib import Path
 from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QPoint, QUrl, Signal
 from PySide6.QtGui import QCloseEvent
+from src.pik2video.gui.common.close_policy import (
+from src.pik2video.gui.common.dialogs import confirm
 from .state import EditorState
 from .drop_zone import DropZone
 from .video_files_panel import VideoFilesPanel
@@ -340,8 +349,9 @@ from PySide6.QtCore import Qt, Signal
 from .screen_settings import CleanSpinBox
 
 # src/pik2video/gui/widgets/global_settings.py
-from PySide6.QtWidgets import QComboBox, QSpinBox, QCheckBox
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QComboBox, QSpinBox, QCheckBox, QPushButton, QMenu
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction
 
 # src/pik2video/gui/widgets/record_settings.py
 from PySide6.QtWidgets import QWidget, QLabel, QPushButton, QHBoxLayout
@@ -360,23 +370,19 @@ from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices, QFont
 from .progress import ProgressDialog
 
-# src/pik2video/gui/windows/main.py
-import logging
-from PySide6.QtWidgets import (
-from PySide6.QtCore import Qt, Signal, QEvent
-from ..widgets.setting_row import SettingRow
-from ..widgets.global_settings import (
-from ..common.utils import center_to_parent, keep_window_inside_screen
-from ..common.base import SettingsDialog
-from ..capture.sessions import VideoCaptureSession, ScreenCaptureSession
-from ..capture.sessions import VideoFinalizeWidget, ScreenFinalizeWidget
-from ..common.tooltip import TooltipButton, set_tooltips_enabled
-
 # src/pik2video/gui/windows/progress.py
 from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont
 from src.pik2video.infrastructure.ffmpeg.installer import FFmpegInstaller
+
+# src/pik2video/gui/windows/recording.py
+import logging
+from PySide6.QtWidgets import (
+from PySide6.QtCore import Qt, Signal, QEvent
+from ..common.utils import keep_window_inside_screen, bottom_right_position
+from ..common.dialogs import confirm
+from ..common.close_policy import (
 
 # src/pik2video/infrastructure/ffmpeg/ffmpeg_service.py
 import logging

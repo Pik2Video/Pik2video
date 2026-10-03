@@ -26,6 +26,7 @@ managed = true
 dev-dependencies = [
     "watchdog>=6.0.0",
     "pyinstaller>=6.19.0",
+    "ruff>=0.16.10",
 ]
 
 [tool.hatch.metadata]

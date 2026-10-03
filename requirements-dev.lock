@@ -76,6 +76,7 @@ requests==2.32.5
     # via pik2video
 rubicon-objc==0.5.3
     # via mouseinfo
+ruff==0.16.10
 setuptools==82.0.1
     # via pyinstaller
     # via pyinstaller-hooks-contrib

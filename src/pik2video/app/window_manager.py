@@ -32,7 +32,7 @@ class WindowManager(QObject):
 
         self.overlay: Optional[CoordinateOverlay] = None
         self.preset_window: Optional[PresetWindow] = None
-        self.app_settings_window = None
+        #self.app_settings_window = None
 
     # ---------------- Overlay ----------------
 
@@ -66,19 +66,6 @@ class WindowManager(QObject):
             self.preset_window.close()
             self.preset_window = None
             logger.debug("Окно пресетов закрыто")
-
-    # ---------------- App settings ----------------
-
-    def open_app_settings(self):
-        from src.pik2video.gui.windows.main import AppSettingsDialog
-
-        if self.app_settings_window is None:
-            self.app_settings_window = AppSettingsDialog(self.main_window, self.controller)
-
-        keep_window_inside_screen(self.app_settings_window)
-        self.app_settings_window.show()
-        self.app_settings_window.activateWindow()
-        bring_window_to_front(self.app_settings_window)
 
     # ---------------- Minimize / restore ----------------
 

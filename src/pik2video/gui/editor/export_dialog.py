@@ -154,6 +154,10 @@ class ExportDialog(QDialog):
     def set_progress(self, percent: int):
         self.progress_bar.setValue(percent)
 
+    def is_done(self) -> bool:
+        """Экспорт завершён (успех или ошибка)."""
+        return self._is_done
+
     def show_success(self, output_path: str):
         self._is_done = True
         self._output_path = output_path
