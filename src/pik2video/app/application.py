@@ -111,7 +111,6 @@ class Application:
             self._editor_window.record_video_requested.connect(self._on_start_video)
             self._editor_window.record_screen_requested.connect(self._on_start_screen)
             self._editor_window.record_audio_requested.connect(self._on_start_audio)
-            #self._editor_window.settings_requested.connect(self._on_open_settings)
             self._editor_window.closed.connect(self._on_editor_closed)
 
         self.main_window.set_editor_visible(True)
@@ -193,7 +192,6 @@ class Application:
             self._editor_window.record_video_requested.connect(self._on_start_video)
             self._editor_window.record_screen_requested.connect(self._on_start_screen)
             self._editor_window.record_audio_requested.connect(self._on_start_audio)
-            #self._editor_window.settings_requested.connect(self._on_open_settings)
             self._editor_window.closed.connect(self._on_editor_closed)
 
         self._editor_window.load_file(path)
