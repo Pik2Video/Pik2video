@@ -14,6 +14,7 @@
 - про FFmpeg
 """
 
+import json
 import logging
 from pathlib import Path
 from typing import Optional
@@ -71,11 +72,20 @@ class EditorState(QObject):
         self._rotation: int = 0
         self._speed: float = 1.0
 
+        self._aspect_preset: str = "original"   # original / 16:9 / 9:16 / 1:1 / 4:5 / 4:3
+        self._aspect_mode: str = "crop"         # crop / pad
+
         self._export_filename: str = ""
         self._export_path: str = str(Path.home() / "Desktop" / "output_file")
 
+        self._source_resolution: tuple = (0, 0)   # (width, height)
         # Экспорт
         self._is_exporting: bool = False
+
+        # ── Персистентность списка файлов ──
+        self._persist_path = Path.home() / ".pik2video" / "editor_files.json"
+        self._loading = False
+        self.videos_changed.connect(self._save_files)
 
     # ── Список видео ──
 
@@ -166,6 +176,7 @@ class EditorState(QObject):
         self._trims.clear()
         self._active_index = -1
         self._position = 0.0
+        self._source_resolution = (0, 0)
 
         self.videos_changed.emit()
         self.video_unloaded.emit()
@@ -274,6 +285,18 @@ class EditorState(QObject):
         logger.debug(f"Разрешение в EditorState: {value}")
         self.settings_changed.emit()
 
+    def set_source_resolution(self, width: int, height: int):
+        if width <= 0 or height <= 0:
+            return
+        if (width, height) == self._source_resolution:
+            return
+        self._source_resolution = (width, height)
+        logger.debug(f"Разрешение источника: {width}×{height}")
+        self.settings_changed.emit()
+
+    def get_source_resolution(self) -> tuple:
+        return self._source_resolution
+
     def get_bitrate_mode(self) -> str:
         return self._bitrate_mode
 
@@ -300,6 +323,31 @@ class EditorState(QObject):
 
     def get_speed(self) -> float:
         return self._speed
+
+    def get_aspect_preset(self) -> str:
+        return self._aspect_preset
+
+    def set_aspect_preset(self, value: str):
+        allowed = {"original", "16:9", "9:16", "1:1", "4:5", "4:3"}
+        if value not in allowed:
+            return
+        if value == self._aspect_preset:
+            return
+        self._aspect_preset = value
+        logger.debug(f"Пресет кадра: {value}")
+        self.settings_changed.emit()
+
+    def get_aspect_mode(self) -> str:
+        return self._aspect_mode
+
+    def set_aspect_mode(self, value: str):
+        if value not in ("crop", "pad"):
+            return
+        if value == self._aspect_mode:
+            return
+        self._aspect_mode = value
+        logger.debug(f"Режим кадра: {value}")
+        self.settings_changed.emit()
 
     def set_speed(self, value: float):
         if value == self._speed:
@@ -340,3 +388,67 @@ class EditorState(QObject):
 
     def is_exporting(self) -> bool:
         return self._is_exporting
+
+
+    # ── Персистентность ──
+
+    def _save_files(self):
+        """Сохранить список файлов в JSON (кроме черновиков)."""
+        if self._loading:
+            return
+        try:
+            self._persist_path.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                "files": list(self._video_files),
+                "active_index": self._active_index,
+            }
+            with open(self._persist_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            logger.debug(f"Список файлов сохранён: {len(self._video_files)} шт.")
+        except Exception as e:
+            logger.warning(f"Не удалось сохранить список файлов: {e}")
+
+    def load_persisted_files(self):
+        """Загрузить сохранённый список файлов при старте редактора."""
+        if not self._persist_path.exists():
+            return
+
+        try:
+            with open(self._persist_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            logger.warning(f"Не удалось прочитать список файлов: {e}")
+            return
+
+        self._loading = True
+        try:
+            for path in data.get("files", []):
+                if not Path(path).exists():
+                    logger.debug(f"Файл исчез, пропускаем: {path}")
+                    continue
+                if path in self._video_files:
+                    continue
+
+                self._video_files.append(path)
+                self._video_durations[path] = 0.0
+                self._trims[path] = (0.0, 0.0)
+
+            if not self._video_files:
+                return
+
+            # Активируем последний (или сохранённый)
+            saved_idx = data.get("active_index", len(self._video_files) - 1)
+            if saved_idx < 0 or saved_idx >= len(self._video_files):
+                saved_idx = len(self._video_files) - 1
+            self._active_index = saved_idx
+
+            active_path = self._video_files[self._active_index]
+
+            self.videos_changed.emit()
+            self.active_video_changed.emit(active_path)
+            self.video_loaded.emit(active_path)
+            self.trim_changed.emit(*self._trims[active_path])
+
+            logger.info(f"Восстановлено файлов: {len(self._video_files)}")
+        finally:
+            self._loading = False

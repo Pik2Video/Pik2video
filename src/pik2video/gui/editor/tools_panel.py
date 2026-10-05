@@ -32,29 +32,39 @@ LABEL_WIDTH = 70
 class ToolsPanel(QFrame):
     """Левая колонка с инструментами и блоком «Информация»."""
 
+
     def __init__(self, state, controller, parent=None):
         super().__init__(parent)
         self.state = state
         self.controller = controller
 
         self.setFrameShape(QFrame.NoFrame)
-        self.setStyleSheet("""
-            ToolsPanel {
-                background-color: #2a2a2a;
-                border: 1px solid #444;
-            }
-        """)
+        self.setStyleSheet("ToolsPanel { background: transparent; border: none; }")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
+        root.setSpacing(6)
 
-        # ── Стек: страницы «Инструменты» и «Настройки» ──
+        # ── Основная зона: инструменты/настройки + метки ──
+        self._main_zone = QFrame()
+        self._main_zone.setStyleSheet("""
+            QFrame {
+                background-color: #2a2a2a;
+                border: 1px solid #444;
+                border-top-left-radius: 0px;
+                border-top-right-radius: 0px;
+                border-bottom-left-radius: 4px;
+                border-bottom-right-radius: 4px;
+            }
+        """)
+        main_layout = QVBoxLayout(self._main_zone)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
         self._stack = QStackedWidget()
         self._stack.setStyleSheet("background: transparent; border: none;")
-        root.addWidget(self._stack)
+        main_layout.addWidget(self._stack)
 
-        # ── Страница 0: инструменты ──
         tools_page = QWidget()
         tools_page.setStyleSheet("background: transparent; border: none;")
         tools_root = QVBoxLayout(tools_page)
@@ -110,14 +120,17 @@ class ToolsPanel(QFrame):
 
         self._stack.addWidget(tools_page)
 
-        # ── Страница 1: настройки ──
         self._settings_panel = GlobalSettingsPanel(self.controller)
         self._stack.addWidget(self._settings_panel)
 
-        # По умолчанию — инструменты
         self._stack.setCurrentIndex(0)
 
-        # ── Обновления ──
+        root.addWidget(self._main_zone, stretch=1)
+
+        # ── Подвал: информация о приложении ──
+        self.app_info_block = self._build_app_info_block()
+        root.addWidget(self.app_info_block, stretch=0)
+
         self.state.videos_changed.connect(self._update_all)
         self.state.active_video_changed.connect(lambda _: self._update_all())
         self.state.video_loaded.connect(lambda _: self._update_all())
@@ -173,6 +186,8 @@ class ToolsPanel(QFrame):
                 background-color: #151515;
                 border: none;
                 border-top: 1px solid #000;
+                border-bottom-left-radius: 4px;
+                border-bottom-right-radius: 4px;
             }
         """)
 
@@ -180,19 +195,7 @@ class ToolsPanel(QFrame):
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(2)
 
-        self.lbl_duration = QLabel("Длительность:  --")
-        self.lbl_size = QLabel("Размер:        --")
-        self.lbl_resolution = QLabel("Разрешение:    --")
-
-        for lbl in (self.lbl_duration, self.lbl_size, self.lbl_resolution):
-            lbl.setStyleSheet(
-                "color: #888; font-size: 11px; "
-                "background: transparent; border: none;"
-            )
-            layout.addWidget(lbl)
-
-        layout.addSpacing(8)
-
+        # ── Скорость (сверху) ──
         speed_row = QWidget()
         speed_row.setStyleSheet("background: transparent; border: none;")
         speed_layout = QHBoxLayout(speed_row)
@@ -210,8 +213,55 @@ class ToolsPanel(QFrame):
         self.speed_tool = SpeedTool(initial=self.state.get_speed())
         self.speed_tool.valueChanged.connect(self.state.set_speed)
         speed_layout.addWidget(self.speed_tool)
-
         layout.addWidget(speed_row)
+        layout.addSpacing(8)
+
+        # ── Метки источника (снизу) ──
+        self.lbl_duration = QLabel("Длительность:  --")
+        self.lbl_size = QLabel("Размер:        --")
+        #self.lbl_resolution = QLabel("Разрешение:    --")
+
+        for lbl in (self.lbl_duration, self.lbl_size):
+            lbl.setStyleSheet(
+                "color: #888; font-size: 11px; "
+                "background: transparent; border: none;"
+            )
+            layout.addWidget(lbl)
+        
+
+        return block
+
+
+        
+
+    def _build_app_info_block(self) -> QFrame:
+        """Подвал панели: 'ffmpeg + pik2video' в три строки."""
+        block = QFrame()
+        block.setStyleSheet("""
+            QFrame {
+                background-color: #151515;
+                border: 1px solid #444;
+                border-radius: 4px;
+            }
+        """)
+
+        layout = QVBoxLayout(block)
+        layout.setContentsMargins(0, 4, 0, 4)
+        layout.setSpacing(0)
+
+        self.app_info_label = QLabel(
+            '<div style="line-height: 100%;">'
+            '<span style="color: #8b1a1a; font-weight: 600;">FFmpeg</span><br>'
+            '<span style="color: #888;">+</span><br>'
+            '<span style="color: #5fbfbf; font-weight: 600;">Pik2Video</span>'
+            '</div>'
+        )
+        self.app_info_label.setTextFormat(Qt.RichText)
+        self.app_info_label.setAlignment(Qt.AlignCenter)
+        self.app_info_label.setStyleSheet(
+            "font-size: 10px; background: transparent; border: none;"
+        )
+        layout.addWidget(self.app_info_label)
 
         return block
 
@@ -221,6 +271,11 @@ class ToolsPanel(QFrame):
         for stack in self._tool_stacks:
             stack.setCurrentIndex(0 if has_file else 1)
         self.speed_tool.setEnabled(has_file)
+
+        # Обновить разрешение источника на кнопке
+        w, h = self.state.get_source_resolution()
+        self.resolution_tool.set_source_resolution(w, h)
+
         self._update_info()
 
     def _update_info(self):
@@ -228,7 +283,7 @@ class ToolsPanel(QFrame):
         if not self.state.has_videos():
             self.lbl_duration.setText("Длительность:  --")
             self.lbl_size.setText("Размер:        --")
-            self.lbl_resolution.setText("Разрешение:    --")
+            #self.lbl_resolution.setText("Разрешение:    --")
             return
 
         start, end = self.state.get_trim()
@@ -248,7 +303,7 @@ class ToolsPanel(QFrame):
         except Exception:
             self.lbl_size.setText("Размер:        --")
 
-        self.lbl_resolution.setText("Разрешение:    --")
+        #self.lbl_resolution.setText("Разрешение:    --")
 
     @staticmethod
     def _format_duration(seconds: float) -> str:

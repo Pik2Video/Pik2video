@@ -40,11 +40,20 @@ SPEED_PRESETS = [0.5, 0.75, 1.0, 1.5, 2.0]
 # Шаг перемотки в секундах
 SEEK_STEP_SEC = 5
 
+ASPECT_RATIOS = {
+    "16:9": (16, 9),
+    "9:16": (9, 16),
+    "1:1":  (1, 1),
+    "4:5":  (4, 5),
+    "4:3":  (4, 3),
+}
+
 class PlayerWidget(QWidget):
     """Плеер с placeholder-страницей и страницей видео."""
 
     position_changed = Signal(float)   # секунды
     duration_changed = Signal(float)   # секунды
+    source_resolution_changed = Signal(int, int)   # ширина, высота
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -60,6 +69,7 @@ class PlayerWidget(QWidget):
         self._last_frame = None
         self._keep_frames = True   # кэшировать кадры
         self._pending_play = False  # идёт seek от кнопки ▶
+        self._aspect_preset = "original"
 
         self._stack = QStackedWidget(self)
 
@@ -88,6 +98,7 @@ class PlayerWidget(QWidget):
         self._player.positionChanged.connect(self._on_position_changed)
         self._player.durationChanged.connect(self._on_duration_changed)
         self._player.playbackStateChanged.connect(self._on_state_changed)
+        self._player.metaDataChanged.connect(self._on_meta_data_changed)
 
         self._show_placeholder()
 
@@ -111,18 +122,20 @@ class PlayerWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
-        # Видео-виджет
-        self._video_widget = QVideoWidget()
-        self._video_widget.setStyleSheet("background-color: #000;")
-        self._video_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        layout.addWidget(self._video_widget, stretch=1)
+        # ── Область видео: чёрный фон, видео позиционируется вручную ──
+        self._video_area = QWidget()
+        self._video_area.setStyleSheet("background-color: #000;")
+        self._video_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(self._video_area, stretch=1)
 
-        # Панель управления
+        # QVideoWidget как дочерний, но БЕЗ layout-менеджера
+        self._video_widget = QVideoWidget(self._video_area)
+        self._video_widget.setStyleSheet("background-color: #000;")
+
         controls = self._build_controls()
         layout.addWidget(controls, stretch=0)
 
         return page
-
     def _build_controls(self) -> QWidget:
         bar = QWidget()
         bar.setFixedHeight(32)
@@ -350,6 +363,46 @@ class PlayerWidget(QWidget):
         if not value:
             self._last_frame = None
 
+    def set_aspect_preset(self, preset: str):
+        """Установить пресет пропорций. Сразу пересчитать раскладку."""
+        self._aspect_preset = preset if preset in ASPECT_RATIOS or preset == "original" else "original"
+        self._relayout_video()
+
+    def _relayout_video(self):
+        """Пересчитать позицию и размер QVideoWidget под текущий пресет."""
+        if not hasattr(self, "_video_area"):
+            return
+
+        area = self._video_area
+        aw = area.width()
+        ah = area.height()
+        if aw <= 0 or ah <= 0:
+            return
+
+        # ── Оригинал: видео занимает всё поле ──
+        if self._aspect_preset == "original":
+            self._video_widget.setGeometry(0, 0, aw, ah)
+            return
+
+        # ── Pad: вписать в пропорции с чёрным фоном ──
+        pw, ph = ASPECT_RATIOS[self._aspect_preset]
+        target_ratio = pw / ph
+        area_ratio = aw / ah
+
+        if target_ratio >= area_ratio:
+            # Пресет шире → видео по ширине
+            w = aw
+            h = int(aw / target_ratio)
+        else:
+            # Пресет выше → видео по высоте
+            h = ah
+            w = int(ah * target_ratio)
+
+        x = (aw - w) // 2
+        y = (ah - h) // 2
+
+        self._video_widget.setGeometry(x, y, w, h)
+
     def _on_video_frame(self, frame):
         """Сохранить последний кадр для превью (только когда нужно)."""
         if not self._keep_frames:
@@ -362,6 +415,10 @@ class PlayerWidget(QWidget):
         self._last_frame = QPixmap.fromImage(image)
 
     # ── Внутренние слоты ──
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._relayout_video()
 
     def _show_placeholder(self):
         self._stack.setCurrentIndex(0)
@@ -422,6 +479,18 @@ class PlayerWidget(QWidget):
             f"{self._format_time(self._player.position())} / {self._format_time(ms)}"
         )
         self.duration_changed.emit(ms / 1000.0)
+
+    def _on_meta_data_changed(self):
+        """Прочитать разрешение из метаданных и эмитить сигнал."""
+        meta = self._player.metaData()
+        if not meta:
+            return
+
+        from PySide6.QtMultimedia import QMediaMetaData
+        resolution = meta.value(QMediaMetaData.Key.Resolution)
+
+        if resolution is not None and not resolution.isEmpty():
+            self.source_resolution_changed.emit(resolution.width(), resolution.height())
 
     def _on_state_changed(self, state):
         if state == QMediaPlayer.PlayingState:
