@@ -49,6 +49,14 @@ ROTATION_FILTER = {
     270: "transpose=2",
 }
 
+ASPECT_RATIOS = {
+    "16:9": (16, 9),
+    "9:16": (9, 16),
+    "1:1":  (1, 1),
+    "4:5":  (4, 5),
+    "4:3":  (4, 3),
+}
+
 
 class ExportService(QObject):
     """Собирает команду и запускает FFmpeg."""
@@ -122,16 +130,25 @@ class ExportService(QObject):
         if end > 0 and (duration <= 0 or end < duration):
             args += ["-to", f"{end:.3f}"]
 
+
         filters = []
 
-        height = RESOLUTION_HEIGHT.get(state.get_resolution())
-        if height:
-            filters.append(f"scale=-2:{height}")
-
+        # 1. Rotation
         rot_filter = ROTATION_FILTER.get(state.get_rotation())
         if rot_filter:
             filters.append(rot_filter)
 
+        # 2. Aspect (crop / pad)
+        aspect_filter = self._build_aspect_filter(state)
+        if aspect_filter:
+            filters.append(aspect_filter)
+
+        # 3. Resolution
+        height = RESOLUTION_HEIGHT.get(state.get_resolution())
+        if height:
+            filters.append(f"scale=-2:{height}")
+
+        # 4. Speed
         speed = state.get_speed()
         if speed != 1.0:
             filters.append(f"setpts=PTS/{speed}")
@@ -253,3 +270,47 @@ class ExportService(QObject):
             remaining /= 2.0
         parts.append(f"atempo={remaining}")
         return ",".join(parts)
+
+
+    def _build_aspect_filter(self, state: EditorState) -> str:
+        """Собрать фильтр crop/pad по пресету кадра."""
+        preset = state.get_aspect_preset()
+        if preset == "original" or preset not in ASPECT_RATIOS:
+            return ""
+
+        src_w, src_h = state.get_source_resolution()
+        if src_w <= 0 or src_h <= 0:
+            logger.warning("Разрешение источника неизвестно — фильтр aspect пропущен")
+            return ""
+
+        ratio_w, ratio_h = ASPECT_RATIOS[preset]
+        target_ratio = ratio_w / ratio_h
+        src_ratio = src_w / src_h
+        mode = state.get_aspect_mode()
+
+        # Считаем целевые размеры — округляем до чётных
+        if mode == "pad":
+            if src_ratio >= target_ratio:
+                # Источник шире — вписываем по ширине, полосы сверху/снизу
+                W = src_w & ~1
+                H = int(src_w / target_ratio) & ~1
+            else:
+                # Источник выше — вписываем по высоте, полосы по бокам
+                W = int(src_h * target_ratio) & ~1
+                H = src_h & ~1
+            return (
+                f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
+                f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black"
+            )
+
+        # crop — обрезаем лишнее по центру
+        if src_ratio >= target_ratio:
+            # Источник шире — обрезаем бока
+            H = src_h & ~1
+            W = int(src_h * target_ratio) & ~1
+        else:
+            # Источник выше — обрезаем верх/низ
+            W = src_w & ~1
+            H = int(src_w / target_ratio) & ~1
+
+        return f"crop={W}:{H}:(iw-{W})/2:(ih-{H})/2"

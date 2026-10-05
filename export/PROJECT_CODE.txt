@@ -12,6 +12,7 @@
 # src/main.py
 from src.pik2video.app import Application
 
+
 def main():
     app = Application()      # ─── Создаём QApplication ───
     app.run()                # ───   Запуск цикла Qt    ───
@@ -19,6 +20,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 ======================================================================
 # src/pik2video/__init__.py
@@ -38,6 +40,7 @@ if __name__ == "__main__":
 - storage/ — работа с временными файлами
 """
 
+
 ======================================================================
 # src/pik2video/app/__init__.py
 ======================================================================
@@ -51,6 +54,7 @@ if __name__ == "__main__":
 from .application import Application
 
 __all__ = ["Application"]
+
 
 ======================================================================
 # src/pik2video/app/application.py
@@ -71,21 +75,18 @@ __all__ = ["Application"]
 
 import logging
 
+from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt, QObject, QEvent
 
 from src.pik2video.application.controller import AppController
 
+from src.pik2video.gui.common.tooltip import is_tooltips_enabled, set_tooltips_enabled
+from src.pik2video.gui.windows.ffmpeg_missing import FFmpegMissingDialog
 from src.pik2video.gui.windows.recording import RecordingWindow
 
-from src.pik2video.gui.windows.ffmpeg_missing import FFmpegMissingDialog
-
-from src.pik2video.gui.common.tooltip import set_tooltips_enabled, is_tooltips_enabled
-
-
 from .blink_manager import BlinkManager
-from .window_manager import WindowManager
 from .state_coordinator import StateCoordinator
+from .window_manager import WindowManager
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +165,6 @@ class Application:
             self._editor_window.record_video_requested.connect(self._on_start_video)
             self._editor_window.record_screen_requested.connect(self._on_start_screen)
             self._editor_window.record_audio_requested.connect(self._on_start_audio)
-            #self._editor_window.settings_requested.connect(self._on_open_settings)
             self._editor_window.closed.connect(self._on_editor_closed)
 
         self.main_window.set_editor_visible(True)
@@ -242,7 +242,6 @@ class Application:
             self._editor_window.record_video_requested.connect(self._on_start_video)
             self._editor_window.record_screen_requested.connect(self._on_start_screen)
             self._editor_window.record_audio_requested.connect(self._on_start_audio)
-            #self._editor_window.settings_requested.connect(self._on_open_settings)
             self._editor_window.closed.connect(self._on_editor_closed)
 
         self._editor_window.load_file(path)
@@ -258,6 +257,7 @@ class Application:
     def run(self):
         self.qt_app.exec()
 
+
 ======================================================================
 # src/pik2video/app/blink_manager.py
 ======================================================================
@@ -272,6 +272,7 @@ class Application:
 """
 
 import logging
+
 from PySide6.QtCore import QObject, QTimer, Signal
 
 logger = logging.getLogger(__name__)
@@ -329,6 +330,7 @@ class BlinkManager(QObject):
 
         self.phase_changed.emit(self._phase)
 
+
 ======================================================================
 # src/pik2video/app/state_coordinator.py
 ======================================================================
@@ -351,17 +353,15 @@ class BlinkManager(QObject):
 import logging
 import shutil
 from datetime import datetime
-from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Slot
 
 from src.pik2video.application.session_types import SessionType
 from src.pik2video.application.state_machine import AppState
 from src.pik2video.gui.capture.preset_window import PresetWindow
-from src.pik2video.utils import format_size, format_time
 
-from .window_manager import WindowManager
 from .blink_manager import BlinkManager
+from .window_manager import WindowManager
 
 logger = logging.getLogger(__name__)
 
@@ -601,7 +601,8 @@ class StateCoordinator(QObject):
             return
 
         if self.main_window.current_session:
-            preset_name = self.main_window.translator.tr("preset_fullscreen")
+            translator = self.controller.get_translator()
+            preset_name = translator.tr("preset_fullscreen")
             self.main_window.current_session.set_info_text(preset_name)
 
     # ==================================================
@@ -615,6 +616,7 @@ class StateCoordinator(QObject):
             self.main_window.current_session.set_blink_phase(phase)
         if self.wm.preset_window:
             self.wm.preset_window.set_blink_phase(phase)
+
 
 ======================================================================
 # src/pik2video/app/window_manager.py
@@ -640,7 +642,6 @@ from PySide6.QtWidgets import QApplication
 
 from src.pik2video.gui.capture.overlays import CoordinateOverlay
 from src.pik2video.gui.capture.preset_window import PresetWindow
-from src.pik2video.gui.common.utils import keep_window_inside_screen, bring_window_to_front
 
 logger = logging.getLogger(__name__)
 
@@ -705,6 +706,7 @@ class WindowManager(QObject):
         if self.preset_window and not self.preset_window.isVisible():
             self.preset_window.show()
 
+
 ======================================================================
 # src/pik2video/application/__init__.py
 ======================================================================
@@ -722,6 +724,7 @@ class WindowManager(QObject):
 - state_machine.py — машина состояний
 """
 
+
 ======================================================================
 # src/pik2video/application/controller.py
 ======================================================================
@@ -733,21 +736,20 @@ class WindowManager(QObject):
 """
 
 import logging
-import psutil
 from pathlib import Path
 from typing import Optional
 
+import psutil
 from PySide6.QtCore import QObject, Signal
 
-from .session_types import SessionType
-from .recording_service import RecordingService
-from .state_machine import AppState
-
 from .managers.ffmpeg_manager import FFmpegManager
+from .managers.recording_manager import RecordingManager
+from .managers.session_manager import SessionManager
 from .managers.settings_manager import SettingsManager
 from .managers.state_manager import StateManager
-from .managers.session_manager import SessionManager
-from .managers.recording_manager import RecordingManager
+from .recording_service import RecordingService
+from .session_types import SessionType
+from .state_machine import AppState
 
 logger = logging.getLogger(__name__)
 
@@ -1124,6 +1126,7 @@ class AppController(QObject):
             logger.debug("→ Эмуляция REVIEW")
             self.state_manager.set_state_dev(AppState.REVIEW)
 
+
 ======================================================================
 # src/pik2video/application/managers/__init__.py
 ======================================================================
@@ -1140,12 +1143,14 @@ class AppController(QObject):
 - state_manager.py — состояния
 """
 
+
 ======================================================================
 # src/pik2video/application/managers/ffmpeg_manager.py
 ======================================================================
 
 # managers/ffmpeg_manager.py
 import logging
+
 from PySide6.QtCore import QObject, Signal
 
 from src.pik2video.infrastructure.ffmpeg.ffmpeg_service import FFmpegService
@@ -1192,6 +1197,7 @@ class FFmpegManager(QObject):
         """Возвращает кэшированный результат проверки"""
         return not self._ffmpeg_missing
 
+
 ======================================================================
 # src/pik2video/application/managers/recording_manager.py
 ======================================================================
@@ -1205,18 +1211,17 @@ class FFmpegManager(QObject):
 import logging
 import time
 from pathlib import Path
-from typing import Optional
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
+from src.pik2video.utils import format_size, format_time
 
+from ..recording_service import RecordingService
 from ..session_types import SessionType
 from ..state_machine import AppState
-from ..recording_service import RecordingService
+from .session_manager import SessionManager
 from .settings_manager import SettingsManager
 from .state_manager import StateManager
-from .session_manager import SessionManager
-from src.pik2video.utils import format_time, format_size
 
 logger = logging.getLogger(__name__)
 
@@ -1422,6 +1427,7 @@ class RecordingManager(QObject):
         self._auto_stop_timer.stop()
         self._is_processing = False
 
+
 ======================================================================
 # src/pik2video/application/managers/session_manager.py
 ======================================================================
@@ -1529,6 +1535,7 @@ class SessionManager(QObject):
         self.region = None
         self._start_time = None
 
+
 ======================================================================
 # src/pik2video/application/managers/settings_manager.py
 ======================================================================
@@ -1550,9 +1557,11 @@ from typing import Optional
 
 from PySide6.QtCore import QObject
 
-from ..settings_model import SettingsModel
+from src.pik2video.locale.languages import code_from_display_name
 from src.pik2video.locale.translator import Translator
+
 from ..session_types import SessionType
+from ..settings_model import SettingsModel
 
 logger = logging.getLogger(__name__)
 
@@ -1571,8 +1580,7 @@ class SettingsManager(QObject):
 
         self.translator = Translator()
         current_lang = self.settings.global_settings.language
-        lang_code = "ru" if current_lang == "Русский" else "en"
-        self.translator.set_language(lang_code)
+        self.translator.set_language(code_from_display_name(current_lang))
 
         logger.debug("SettingsManager инициализирован")
 
@@ -1596,8 +1604,7 @@ class SettingsManager(QObject):
     def _apply_language(self):
         """Применить текущий язык из настроек к Translator"""
         lang = self.settings.global_settings.language
-        lang_code = "ru" if lang == "Русский" else "en"
-        self.translator.set_language(lang_code)
+        self.translator.set_language(code_from_display_name(lang))
 
 
     def get_language(self) -> str:
@@ -1645,6 +1652,7 @@ class SettingsManager(QObject):
 
 
     def get_record_fps(self) -> int:
+        
         return self.settings.record.fps
 
     def set_record_fps(self, fps: int):
@@ -1797,6 +1805,7 @@ class SettingsManager(QObject):
         self.settings.screen.common.start_delay = max(0, seconds)
         logger.debug(f"Screen start_delay установлен: {seconds} сек")
 
+
 ======================================================================
 # src/pik2video/application/managers/state_manager.py
 ======================================================================
@@ -1808,9 +1817,10 @@ class SettingsManager(QObject):
 """
 
 import logging
+
 from PySide6.QtCore import QObject, Signal
 
-from ..state_machine import StateMachine, AppState
+from ..state_machine import AppState, StateMachine
 
 logger = logging.getLogger(__name__)
 
@@ -1898,6 +1908,7 @@ class StateManager(QObject):
         """Только для тестов."""
         self._state_machine.set_state_dev(state)
 
+
 ======================================================================
 # src/pik2video/application/recording_service.py
 ======================================================================
@@ -1906,11 +1917,11 @@ class StateManager(QObject):
 import ctypes
 import logging
 from pathlib import Path
-from typing import Optional
-from PySide6.QtWidgets import QApplication   # <-- НОВОЕ: импорт для получения масштаба
 
-from .settings_model import SettingsModel
+from PySide6.QtWidgets import QApplication  # <-- НОВОЕ: импорт для получения масштаба
+
 from .session_types import SessionType
+from .settings_model import SettingsModel
 
 logger = logging.getLogger(__name__)
 
@@ -2032,6 +2043,7 @@ class RecordingService:
     def is_recording(self) -> bool:
         return self._is_recording
 
+
 ======================================================================
 # src/pik2video/application/session_service.py
 ======================================================================
@@ -2039,7 +2051,9 @@ class RecordingService:
 # src/pik2video/application/session_service.py
 from pathlib import Path
 from typing import Optional
+
 from src.pik2video.storage.session_storage import SessionStorage
+
 
 class SessionService:
     """
@@ -2082,6 +2096,7 @@ class SessionService:
     def cleanup(self):
         self.storage.cleanup()
 
+
 ======================================================================
 # src/pik2video/application/session_types.py
 ======================================================================
@@ -2090,21 +2105,22 @@ class SessionService:
 
 from enum import Enum
 
+
 class SessionType(Enum):
     VIDEO = "video"
     SCREEN = "screen"
+
 
 ======================================================================
 # src/pik2video/application/settings_model.py
 ======================================================================
 
-# application/settings_model.py
-
-import logging
-
+# src/pik2video/application/settings_model.py
 import json
-from pathlib import Path
+import logging
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -2169,7 +2185,7 @@ class SettingsModel:
 
     finalize: FinalizeSettings = field(default_factory=FinalizeSettings)
 
-    def save_to_file(self, filepath: Path = None):
+    def save_to_file(self, filepath: Optional[Path] = None):
         """Сохраняет настройки в JSON файл"""
         if filepath is None:
             filepath = Path.home() / ".pik2video" / "settings.json"
@@ -2188,7 +2204,7 @@ class SettingsModel:
         
         logger.debug(f"Настройки сохранены в {filepath}")
     
-    def load_from_file(self, filepath: Path = None):
+    def load_from_file(self, filepath: Optional[Path] = None):
         """Загружает настройки из JSON файла"""
         if filepath is None:
             filepath = Path.home() / ".pik2video" / "settings.json"
@@ -2254,6 +2270,7 @@ class SettingsModel:
 # src/pik2video/application/state_machine.py
 
 from enum import Enum, auto
+
 from PySide6.QtCore import QObject, Signal
 
 
@@ -2403,6 +2420,7 @@ class StateMachine(QObject):
         """Установить состояние напрямую (только для разработки)"""
         self._state = state
 
+
 ======================================================================
 # src/pik2video/gui/__init__.py
 ======================================================================
@@ -2418,6 +2436,7 @@ class StateMachine(QObject):
 - common/ — общие примитивы (после рефакторинга)
 - widgets/ — переиспользуемые виджеты настроек
 """
+
 
 ======================================================================
 # src/pik2video/gui/capture/__init__.py
@@ -2435,6 +2454,7 @@ class StateMachine(QObject):
 - preset_window.py — PresetWindow
 """
 
+
 ======================================================================
 # src/pik2video/gui/capture/overlays.py
 ======================================================================
@@ -2443,13 +2463,13 @@ class StateMachine(QObject):
 
 import logging
 
-from PySide6.QtWidgets import QWidget, QRubberBand
-from PySide6.QtCore import Qt, QRect, QTimer, Signal
-from PySide6.QtGui import QPainter, QColor, QPen, QFont
+from PySide6.QtCore import QRect, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtWidgets import QWidget
 
 from src.pik2video.gui.common.blink_style import (
-    OVERLAY_ALPHA_DIM,
     OVERLAY_ALPHA_BRIGHT,
+    OVERLAY_ALPHA_DIM,
     lerp_alpha,
 )
 
@@ -2620,25 +2640,21 @@ class CoordinateOverlay(QWidget):
                 text
             )
 
+
 ======================================================================
 # src/pik2video/gui/capture/panels.py
 ======================================================================
 
 # src/pik2video/gui/capture/panels.py
 
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QStackedWidget,
-    QSizePolicy
-)
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget
 
 from src.pik2video.gui.common.blink_style import (
-    LABEL_ALPHA_DIM,
     LABEL_ALPHA_BRIGHT,
+    LABEL_ALPHA_DIM,
     lerp_alpha,
 )
-
 from src.pik2video.gui.common.tooltip import TooltipButton
 
 
@@ -2979,23 +2995,26 @@ class CapturePanel(QWidget):
         self.right_label.hide()
         self.center_label.show()
 
+
 ======================================================================
 # src/pik2video/gui/capture/preset_window.py
 ======================================================================
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
-from PySide6.QtCore import Qt, Signal, QTimer, QSize
+from typing import ClassVar
+
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from src.pik2video.gui.common.blink_style import (
-    PRESET_BG_DIM,
     PRESET_BG_BRIGHT,
-    PRESET_BORDER_DIM,
+    PRESET_BG_DIM,
     PRESET_BORDER_BRIGHT,
+    PRESET_BORDER_DIM,
     lerp_color_hex,
 )
-
 from src.pik2video.gui.common.tooltip import TooltipButton
+
 
 class PresetWindow(QWidget):
     """
@@ -3005,7 +3024,7 @@ class PresetWindow(QWidget):
     
     preset_selected = Signal(dict, str, str)
     
-    PRESETS = [
+    PRESETS: ClassVar[list] = [
         ("🖥️", "fullscreen", "Весь экран"),
         ("📱", "mobile", "Мобильный"),
         ("📺", "youtube", "YouTube"),
@@ -3015,7 +3034,7 @@ class PresetWindow(QWidget):
         ("📺", "16x10", "16:10"),
     ]
     
-    PRESET_SIZES = {
+    PRESET_SIZES: ClassVar[dict] = {
         "fullscreen": (0, 0),
         "mobile": (390, 844),
         "youtube": (1920, 1080),
@@ -3309,37 +3328,34 @@ class PresetWindow(QWidget):
             self._blink_timer.stop()
         super().closeEvent(event)
 
+
 ======================================================================
 # src/pik2video/gui/capture/sessions.py
 ======================================================================
 
 # src/pik2video/gui/capture/sessions.py
 
-from PySide6.QtWidgets import QWidget, QLabel, QApplication, QHBoxLayout, QVBoxLayout, QSpinBox
-from PySide6.QtCore import Qt, QTimer, QEvent, Signal
-from PySide6.QtGui import QResizeEvent, QCloseEvent
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtWidgets import QSpinBox, QVBoxLayout, QWidget
 
+from ..common.base import SettingsDialog
+from ..common.utils import keep_window_inside_screen
+from ..widgets.common_settings import ExportFilenameInput, QualitySwitcher, TimerInput
+from ..widgets.record_settings import FpsSwitcher
 from ..widgets.screen_settings import CapturePerMinuteInput, CleanSpinBox
 from ..widgets.setting_row import SettingRow
-from ..widgets.record_settings import FpsSwitcher
-from ..widgets.common_settings import TimerInput, QualitySwitcher, ExportFilenameInput
 
-from src.pik2video.gui.common.dialogs import confirm
-from ..common.utils import center_to_parent, fullscreen_geometry, bring_window_to_front, keep_window_inside_screen
-from ..common.base import SettingsDialog
-from .overlays import CoordinateOverlay
+#from .overlays import CoordinateOverlay
 from .panels import CapturePanel
 
 
 class CaptureSession(QWidget):
-
-    closed_by_user = Signal()
-    back_requested = Signal()
-
     """
     Базовая сессия захвата. Управляет:
     - overlay / состоянием / таймерами / запретом закрытия
     """
+
+    back_requested = Signal()
 
     TIME_INTERVAL = 1000
     RAM_INTERVAL = 1000
@@ -3382,15 +3398,6 @@ class CaptureSession(QWidget):
         self.time_timer.stop()
         self.ram_timer.stop()
         self.cpu_timer.stop()  # остановка CPU таймера
-
-    def set_waiting_mode(self):
-        """Режим ожидания перед стартом записи"""
-        self.panel.btn_start.setEnabled(False)
-        self.panel.btn_stop.setEnabled(True)
-        self.panel.set_waiting_mode()
-        delay = self.controller.get_start_delay()
-        tr = self.controller.get_translator()
-        self.panel.info_label.setText(f"{tr.tr('info_waiting')} {delay} {tr.tr('seconds')}")
 
     def set_time(self, text: str):
         """Обновить таймер в чёрном поле"""
@@ -3471,7 +3478,6 @@ class CaptureSession(QWidget):
 
     def create_settings_dialog(self):
         raise NotImplementedError
-
 
     time_update_requested = Signal()
     ram_update_requested = Signal()
@@ -3750,6 +3756,7 @@ class ScreenSettingsDialog(SettingsDialog):
 - close_policy.py — enum ClosePolicy
 """
 
+
 ======================================================================
 # src/pik2video/gui/common/base.py
 ======================================================================
@@ -3758,11 +3765,19 @@ class ScreenSettingsDialog(SettingsDialog):
 
 import logging
 
-from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QPushButton
-from PySide6.QtCore import Qt, QEvent
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QCloseEvent
+from PySide6.QtWidgets import QDialog, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
+
+from .close_policy import (
+    CloseAction,
+    CloseContext,
+    ClosePolicy,
+    CloseRule,
+    evaluate_close,
+)
 from .dialogs import confirm
-from .utils import center_to_parent, keep_window_inside_screen
+from .utils import keep_window_inside_screen
 
 logger = logging.getLogger(__name__)
 
@@ -3804,35 +3819,40 @@ class BaseDialog(QDialog):
 
     
     def closeEvent(self, event: QCloseEvent):
+        action = evaluate_close(
+            self.get_close_policy(),
+            self.make_close_context(),
+            ask=self._ask,
+        )
 
-        if not self.can_close():
-            event.ignore()  # отменяем закрытие
-            return
-
-        if self.requires_confirmation_on_close() and not confirm(self, "Вы уверены?"):
+        if action == CloseAction.CLOSE:
+            event.accept()
+            self.on_closed()
+        else:
             event.ignore()
-            return
-
-        if not self.on_before_close():
-            event.ignore()
-            return
-
-        event.accept()
-
-        self.on_after_close()
 
 
-    def can_close(self) -> bool:
-        return True
+    def get_close_policy(self) -> ClosePolicy:
+        """Политика закрытия. Переопределяется в наследниках."""
+        return ClosePolicy.ALLOW
 
-    def requires_confirmation_on_close(self) -> bool:
-        return False
+    def make_close_context(self) -> CloseContext:
+        """Факты о состоянии для close_policy. Переопределяется при необходимости."""
+        return CloseContext()
 
-    def on_before_close(self) -> bool:
-        return True
+    def _ask(self, rule: CloseRule) -> bool:
+        """Мост между политикой и QMessageBox."""
+        return confirm(
+            self,
+            rule.text,
+            title=rule.title,
+            translator=getattr(self, "translator", None),
+            yes_label=rule.yes_label,
+            no_label=rule.no_label,
+        )
 
-    def on_after_close(self):
-        pass
+    def on_closed(self):
+        """Хук после успешного закрытия. Переопределяется в наследниках."""
 
 
 class BaseFormDialog(BaseDialog):
@@ -3976,7 +3996,6 @@ class SettingsDialog(BaseFormDialog):
             self.close()
 
     def eventFilter(self, obj, event):
-        from PySide6.QtCore import QEvent
         if obj == self._parent and event.type() == QEvent.Move:
             if self.isVisible():
                 from .utils import center_to_parent, keep_window_inside_screen
@@ -3986,9 +4005,6 @@ class SettingsDialog(BaseFormDialog):
 
     def apply_settings(self) -> bool:
         return True
-
-    def requires_confirmation_on_close(self) -> bool:
-        return False
 
 
 
@@ -4038,6 +4054,7 @@ def lerp_color_hex(c1: str, c2: str, t: float) -> str:
     bl = int(a.blue() + (b.blue()  - a.blue())  * t)
     return f"#{r:02x}{g:02x}{bl:02x}"
 
+
 ======================================================================
 # src/pik2video/gui/common/close_policy.py
 ======================================================================
@@ -4070,7 +4087,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Callable, Optional
-
 
 # ─────────────────────────────────────────────────────────
 # ─────────────────────────────────────────────────────────
@@ -4265,6 +4281,7 @@ def _ask(rule: CloseRule, ask: Optional[AskFunc]) -> CloseAction:
         return rule.on_yes
     return rule.on_no
 
+
 ======================================================================
 # src/pik2video/gui/common/dialogs.py
 ======================================================================
@@ -4273,7 +4290,6 @@ def _ask(rule: CloseRule, ask: Optional[AskFunc]) -> CloseAction:
 
 
 from PySide6.QtWidgets import QMessageBox
-
 
 
 def confirm(
@@ -4371,15 +4387,16 @@ def error(parent, text: str, title: str = "Ошибка", translator=None):
     
     msg.exec()
 
+
 ======================================================================
 # src/pik2video/gui/common/tooltip.py
 ======================================================================
 
 # src/pik2video/gui/common/tooltip.py
 
-from PySide6.QtWidgets import QLabel, QApplication, QPushButton
-from PySide6.QtCore import Qt, QTimer, QPoint
+from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QLabel, QPushButton
 
 _tooltips_enabled = True
 
@@ -4471,14 +4488,14 @@ class TooltipButton(QPushButton):
         if self._tooltip:
             self._tooltip.hide_tip()
 
+
 ======================================================================
 # src/pik2video/gui/common/utils.py
 ======================================================================
 
 # src/pik2video/gui/common/utils.py
 
-from PySide6.QtCore import Qt, QPoint, QRect
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtCore import QPoint, QRect
 
 
 def bottom_right_position(window, screen_geometry: QRect, margin: int = 0) -> QPoint:
@@ -4527,21 +4544,551 @@ def keep_window_inside_screen(window, margin=120):
 Пакет редактора видео.
 """
 
-from .window import EditorWindow
-from .state import EditorState
 from .drop_zone import DropZone
-from .video_files_panel import VideoFilesPanel
-from .player import PlayerWidget
-from .timeline import TimelineWidget
-from .volume import VolumeControl
-from .tools_panel import ToolsPanel
 from .export_service import ExportService
+from .player import PlayerWidget
+from .state import EditorState
+from .timeline import TimelineWidget
+from .tools_panel import ToolsPanel
+from .video_files_panel import VideoFilesPanel
+from .volume import VolumeControl
+from .window import EditorWindow
 
 __all__ = [
-    "EditorWindow", "EditorState", "DropZone", "VideoFilesPanel",
-    "PlayerWidget", "TimelineWidget", "VolumeControl", "ToolsPanel",
+    "DropZone",
+    "EditorState",
+    "EditorWindow",
     "ExportService",
+    "PlayerWidget",
+    "TimelineWidget",
+    "ToolsPanel",
+    "VideoFilesPanel",
+    "VolumeControl",
 ]
+
+
+======================================================================
+# src/pik2video/gui/editor/bottom_panel.py
+======================================================================
+
+# src/pik2video/gui/editor/bottom_panel.py
+"""
+Нижняя панель редактора (зона 3).
+
+Содержит:
+- поле имени файла
+- путь экспорта (кнопка)
+- кнопку «Экспорт»
+- кнопку «Очистить» в dashed-рамке
+
+Публикует сигналы наружу.
+"""
+
+import logging
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
+
+logger = logging.getLogger(__name__)
+
+DROP_AREA_WIDTH = 108
+BOTTOM_PANEL_HEIGHT = 44
+EXPORT_NAME_WIDTH = 130
+
+
+class BottomPanel(QWidget):
+    """Нижняя панель: экспорт + очистка."""
+
+    export_clicked = Signal()
+    clear_clicked = Signal()
+    export_path_clicked = Signal()
+    export_name_changed = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._build_ui()
+
+    def _build_ui(self):
+        self.setFixedHeight(BOTTOM_PANEL_HEIGHT)
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #2a2a2a;
+                border: 1px solid #444;
+                border-radius: 4px;
+            }
+        """)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(6, 2, 0, 2)
+        layout.setSpacing(8)
+
+        self.export_block = QWidget()
+        self.export_block.setStyleSheet("""
+            QWidget {
+                background-color: #383838;
+                border: 1px solid #555;
+                border-radius: 4px;
+            }
+        """)
+        export_layout = QHBoxLayout(self.export_block)
+        export_layout.setContentsMargins(8, 2, 4, 2)
+        export_layout.setSpacing(6)
+
+        self.export_name_frame = QFrame()
+        self.export_name_frame.setFixedWidth(EXPORT_NAME_WIDTH)
+        self.export_name_frame.setStyleSheet("""
+            QFrame {
+                background-color: #1e1e1e;
+                border: 1px solid #444;
+                border-radius: 4px;
+            }
+        """)
+        name_layout = QHBoxLayout(self.export_name_frame)
+        name_layout.setContentsMargins(6, 2, 6, 2)
+        name_layout.setSpacing(0)
+
+        self.export_name_input = QLineEdit()
+        self.export_name_input.setFrame(False)
+        self.export_name_input.setPlaceholderText("имя файла")
+        self.export_name_input.setEnabled(False)
+        self.export_name_input.setStyleSheet("""
+            QLineEdit {
+                background: transparent;
+                border: none;
+                color: #e0e0e0;
+                font-size: 11px;
+                padding: 0px;
+            }
+            QLineEdit:disabled {
+                color: #555;
+                background: transparent;
+            }
+        """)
+        self.export_name_input.textChanged.connect(self.export_name_changed.emit)
+
+        self.export_ext_label = QLabel("")
+        self.export_ext_label.setStyleSheet(
+            "color: #666; font-size: 11px; "
+            "background: transparent; border: none;"
+        )
+
+        name_layout.addWidget(self.export_name_input, stretch=1)
+        name_layout.addWidget(self.export_ext_label, stretch=0)
+
+        self.export_path_value = QPushButton("")
+        self.export_path_value.setFlat(True)
+        self.export_path_value.setCursor(Qt.PointingHandCursor)
+        self.export_path_value.clicked.connect(self.export_path_clicked.emit)
+
+        self.btn_export = QPushButton("Экспорт")
+        self.btn_export.setFixedHeight(24)
+        self.btn_export.setFixedWidth(100)
+        self.btn_export.clicked.connect(self.export_clicked.emit)
+        self.btn_export.setStyleSheet("""
+            QPushButton {
+                background-color: #2a7a2a;
+                border: 1px solid #3a9a3a;
+                border-radius: 4px;
+                color: white;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #3a9a3a; }
+            QPushButton:pressed { background-color: #1a5a1a; }
+            QPushButton:disabled {
+                background-color: #2a2a2a;
+                border: 1px solid #444;
+                color: #555;
+            }
+        """)
+        self.btn_export.setEnabled(False)
+
+        export_layout.addWidget(self.export_name_frame, stretch=0)
+        export_layout.addStretch(1)
+        export_layout.addWidget(self.export_path_value, stretch=0)
+        export_layout.addSpacing(12)
+        export_layout.addWidget(self.btn_export, stretch=0)
+
+        layout.addWidget(self.export_block, stretch=1)
+
+        self.clear_frame = QFrame()
+        self.clear_frame.setFixedWidth(DROP_AREA_WIDTH)
+        self.clear_frame.setStyleSheet("""
+            QFrame {
+                background-color: #2a2a2a;
+                border: 2px dashed #555;
+                border-radius: 6px;
+            }
+        """)
+        clear_layout = QVBoxLayout(self.clear_frame)
+        clear_layout.setContentsMargins(6, 6, 6, 6)
+        clear_layout.setSpacing(0)
+
+        self.btn_clear = QPushButton("Очистить")
+        self.btn_clear.setFixedHeight(24)
+        self.btn_clear.clicked.connect(self.clear_clicked.emit)
+
+        clear_layout.addStretch()
+        clear_layout.addWidget(self.btn_clear)
+
+        layout.addWidget(self.clear_frame, stretch=0)
+
+        self.set_clear_enabled(False)
+        self.set_export_path("")
+
+
+    def set_export_enabled(self, enabled: bool):
+        self.btn_export.setEnabled(enabled)
+
+    def set_export_text(self, text: str):
+        self.btn_export.setText(text)
+
+    def set_export_filename(self, stem: str, ext: str):
+        if stem:
+            self.export_name_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #2a2a2a;
+                    border: 1px solid #555;
+                    border-radius: 4px;
+                }
+            """)
+            self.export_name_input.setEnabled(True)
+            self.export_name_input.blockSignals(True)
+            self.export_name_input.setText(stem)
+            self.export_name_input.blockSignals(False)
+            self.export_ext_label.setText(ext)
+            self.export_ext_label.setStyleSheet(
+                "color: #666; font-size: 11px; "
+                "background: transparent; border: none;"
+            )
+        else:
+            self.export_name_frame.setStyleSheet("""
+                QFrame {
+                    background-color: #1e1e1e;
+                    border: 1px solid #444;
+                    border-radius: 4px;
+                }
+            """)
+            self.export_name_input.setEnabled(False)
+            self.export_name_input.blockSignals(True)
+            self.export_name_input.setText("")
+            self.export_name_input.blockSignals(False)
+            self.export_ext_label.setText("")
+
+    def set_export_path(self, path: str):
+        self.export_path_value.setText(path)
+        self.export_path_value.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                color: #5fbfbf;
+                font-size: 13px;
+                text-align: right;
+                padding: 6px 10px;
+            }
+            QPushButton:hover {
+                color: #7fd8d8;
+            }
+        """)
+
+    def set_clear_enabled(self, enabled: bool):
+        self.btn_clear.setEnabled(enabled)
+        if enabled:
+            self.btn_clear.setStyleSheet("""
+                QPushButton {
+                    background-color: #5a1a1a;
+                    border: 1px solid #7a2a2a;
+                    border-radius: 4px;
+                    color: #e0c0c0;
+                    font-size: 10px;
+                }
+                QPushButton:hover { background-color: #7a2a2a; }
+                QPushButton:pressed { background-color: #3a0a0a; }
+            """)
+        else:
+            self.btn_clear.setStyleSheet("""
+                QPushButton {
+                    background-color: #2a2a2a;
+                    border: 1px solid #444;
+                    border-radius: 4px;
+                    color: #666;
+                    font-size: 10px;
+                }
+            """)
+
+
+======================================================================
+# src/pik2video/gui/editor/crop_mode.py
+======================================================================
+
+# src/pik2video/gui/editor/crop_mode.py
+"""
+Режим обрезки кадра.
+
+Отвечает за:
+- квадратную кнопку ⛶ в углу мультиплеера
+- прозрачный overlay для закрытия режима по клику
+- показ/скрытие панели пресетов через top_bar
+
+Не знает:
+- как применяется обрезка
+- про EditorState
+"""
+
+import logging
+
+from PySide6.QtCore import QObject, QPoint, Qt, Signal
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+
+logger = logging.getLogger(__name__)
+
+
+class _CropModeButton(QWidget):
+    """Top-level квадратная кнопка в углу мультиплеера."""
+
+    clicked = Signal()
+
+    def __init__(self):
+        super().__init__(
+            None,
+            Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setFixedSize(36, 36)
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #2a2a2a;
+                border: 1px solid #555;
+                border-radius: 6px;
+            }
+            QWidget:hover {
+                background-color: #3a3a3a;
+                border-color: #d4a843;
+            }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self._label = QLabel("⛶")
+        self._label.setAlignment(Qt.AlignCenter)
+        self._label.setStyleSheet(
+            "color: #e0e0e0; font-size: 20px; "
+            "background: transparent; border: none;"
+        )
+        layout.addWidget(self._label)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+
+
+class _CropCloseOverlay(QWidget):
+    """Прозрачный top-level overlay — ловит клики вне панели/кнопки."""
+
+    clicked = Signal()
+
+    def __init__(self):
+        super().__init__(
+            None,
+            Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+
+
+class CropModeController(QObject):
+    """Управляет режимом обрезки кадра."""
+
+    mode_opened = Signal()
+    mode_closed = Signal()
+
+    def __init__(self, editor_window, parent=None):
+        super().__init__(parent)
+        self._editor = editor_window
+
+        self._button = _CropModeButton()
+        self._button.clicked.connect(self.toggle)
+
+        self._overlay = _CropCloseOverlay()
+        self._overlay.clicked.connect(self.close)
+
+        self._active = False
+
+
+    def is_active(self) -> bool:
+        return self._active
+
+    def toggle(self):
+        if self._active:
+            self.close()
+        else:
+            self.open()
+
+    def open(self):
+        editor = self._editor
+        if not editor.state.has_videos():
+            return
+
+        self._active = True
+
+        editor.top_bar.show_presets(True)
+
+        editor_global = editor.mapToGlobal(QPoint(0, 0))
+        top_bar_h = editor.top_bar.height()
+        self._overlay.setGeometry(
+            editor_global.x(),
+            editor_global.y() + top_bar_h,
+            editor.width(),
+            editor.height() - top_bar_h,
+        )
+        self._overlay.show()
+        self._overlay.raise_()
+
+        self._position_button()
+        self._button.show()
+        self._button.raise_()
+
+        editor.top_bar.btn_settings.setEnabled(False)
+
+        self.mode_opened.emit()
+
+    def close(self):
+        if not self._active:
+            return
+
+        self._active = False
+
+        self._editor.top_bar.show_presets(False)
+        self._overlay.hide()
+        self._editor.top_bar.btn_settings.setEnabled(True)
+
+        self.mode_closed.emit()
+
+    def show_button_if_needed(self):
+        """Показать/скрыть кнопку ⛶ в зависимости от наличия видео."""
+        if self._editor.state.has_videos():
+            self._position_button()
+            self._button.show()
+            self._button.raise_()
+        else:
+            self._button.hide()
+            if self._active:
+                self.close()
+
+    def reposition(self):
+        """Пересчитать позицию кнопки."""
+        if self._button.isVisible():
+            self._position_button()
+
+    def hide_windows(self):
+        """Скрыть окна при закрытии редактора."""
+        for w in (self._button, self._overlay):
+            try:
+                w.hide()
+                w.deleteLater()
+            except Exception:
+                pass
+
+
+    def _position_button(self):
+        try:
+            container = self._editor.multiplexer
+            container_global = container.mapToGlobal(QPoint(0, 0))
+            x = container_global.x() + 8
+            y = container_global.y() + 8
+            self._button.move(x, y)
+        except Exception as e:
+            logger.warning(f"Не удалось позиционировать кнопку кадра: {e}")
+
+
+======================================================================
+# src/pik2video/gui/editor/drop_area.py
+======================================================================
+
+# src/pik2video/gui/editor/drop_area.py
+"""
+Правая колонка редактора (зона 4).
+
+Содержит:
+- панель со списком видеофайлов (VideoFilesPanel)
+- drop-зону для аудиофайлов (DropZone)
+
+Публикует сигналы наружу.
+"""
+
+import logging
+
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QVBoxLayout, QWidget
+
+from .drop_zone import DropZone
+from .video_files_panel import VideoFilesPanel
+
+logger = logging.getLogger(__name__)
+
+DROP_AREA_WIDTH = 108
+DROP_VIDEO_RATIO = 2
+DROP_AUDIO_RATIO = 1
+GAP = 4
+
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".m4v"}
+AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".flac"}
+
+
+class DropArea(QWidget):
+    """Колонка из двух зон: видео (2/3) и аудио (1/3)."""
+
+    video_dropped = Signal(str)
+    video_selected = Signal(int)
+    video_delete_requested = Signal()
+    audio_dropped = Signal(str)
+    audio_delete_requested = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._build_ui()
+
+    def _build_ui(self):
+        self.setFixedWidth(DROP_AREA_WIDTH)
+        self.setStyleSheet("background: transparent; border: none;")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(GAP)
+
+        self.drop_video = VideoFilesPanel(extensions=VIDEO_EXTENSIONS)
+        self.drop_video.file_dropped.connect(self.video_dropped.emit)
+        self.drop_video.file_selected.connect(self.video_selected.emit)
+        self.drop_video.delete_requested.connect(self.video_delete_requested.emit)
+        layout.addWidget(self.drop_video, stretch=DROP_VIDEO_RATIO)
+
+        self.drop_audio = DropZone(
+            icon="🎵",
+            label="mp3",
+            extensions=AUDIO_EXTENSIONS,
+            with_delete_button=True,
+        )
+        self.drop_audio.file_dropped.connect(self.audio_dropped.emit)
+        self.drop_audio.delete_requested.connect(self.audio_delete_requested.emit)
+        layout.addWidget(self.drop_audio, stretch=DROP_AUDIO_RATIO)
+
+
+    def set_video_files(self, files: list, active_index: int):
+        self.drop_video.set_files(files, active_index)
+
+    def set_video_active(self, active_index: int):
+        self.drop_video.set_active(active_index)
+
+    def show_audio(self, path: str):
+        self.drop_audio.show_audio(path)
+
+    def show_audio_empty(self):
+        self.drop_audio.show_empty(icon="🎵", label="mp3")
+
 
 ======================================================================
 # src/pik2video/gui/editor/drop_zone.py
@@ -4566,9 +5113,9 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from PySide6.QtWidgets import QFrame, QVBoxLayout, QLabel, QFileIconProvider, QPushButton, QWidget
-from PySide6.QtCore import Qt, Signal, QFileInfo
+from PySide6.QtCore import QFileInfo, Qt, Signal
 from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import QFileIconProvider, QFrame, QLabel, QPushButton, QVBoxLayout, QWidget
 
 logger = logging.getLogger(__name__)
 
@@ -4797,6 +5344,7 @@ class DropZone(QFrame):
                     "-",
                 ],
                 capture_output=True,
+                check=False,
                 timeout=5,
             )
 
@@ -4820,6 +5368,114 @@ class DropZone(QFrame):
         )
         self._has_file = False
         self._update_delete_button()
+
+
+======================================================================
+# src/pik2video/gui/editor/export_controller.py
+======================================================================
+
+# src/pik2video/gui/editor/export_controller.py
+"""
+Контроллер экспорта.
+
+Отвечает за:
+- запуск ExportService
+- показ диалога прогресса
+- обработку отмены
+- показ результата (успех / ошибка)
+
+Не знает:
+- про layout редактора
+- про другие зоны
+"""
+
+import logging
+
+from PySide6.QtCore import QObject, Signal
+from PySide6.QtWidgets import QMessageBox
+
+from .export_dialog import ExportDialog
+from .export_service import ExportService
+from .state import EditorState
+
+logger = logging.getLogger(__name__)
+
+
+class ExportController(QObject):
+    """Управляет процессом экспорта."""
+
+    export_started = Signal()
+    export_progress = Signal(int)
+    export_finished = Signal(bool, str)
+
+    def __init__(self, editor_window, state: EditorState, parent=None):
+        super().__init__(parent)
+        self._editor = editor_window
+        self._state = state
+
+        self._service = ExportService(self)
+        self._service.export_started.connect(self._on_started)
+        self._service.export_progress.connect(self._on_progress)
+        self._service.export_finished.connect(self._on_finished)
+
+        self._dialog = None
+
+
+    def is_running(self) -> bool:
+        return self._service.is_running()
+
+    def start(self):
+        """Запустить экспорт с показом прогресса."""
+        if not self._state.has_videos():
+            QMessageBox.warning(self._editor, "Экспорт", "Нет активного видеофайла.")
+            return
+
+        if self._service.is_running():
+            QMessageBox.information(self._editor, "Экспорт", "Экспорт уже идёт.")
+            return
+
+        self._editor.bottom_panel.set_export_enabled(False)
+        self._editor.bottom_panel.set_export_text("Экспорт...")
+
+        self._dialog = ExportDialog(self._editor)
+        self._dialog.cancel_requested.connect(self._on_cancel)
+        self._dialog.show()
+
+        self._service.start_export(self._state)
+
+    def cancel(self):
+        """Прервать текущий экспорт."""
+        if self._dialog is not None:
+            self._dialog.set_cancelling()
+        self._service.cancel()
+
+
+    def _on_cancel(self):
+        self.cancel()
+
+    def _on_started(self):
+        logger.info("Экспорт: старт")
+        self.export_started.emit()
+
+    def _on_progress(self, percent: int):
+        if self._dialog is not None:
+            self._dialog.set_progress(percent)
+        self.export_progress.emit(percent)
+
+    def _on_finished(self, success: bool, message: str):
+        self._editor.bottom_panel.set_export_enabled(True)
+        self._editor.bottom_panel.set_export_text("Экспорт")
+
+        if self._dialog is None:
+            return
+
+        if success:
+            self._dialog.show_success(message)
+        else:
+            self._dialog.show_error(message)
+
+        self.export_finished.emit(success, message)
+
 
 ======================================================================
 # src/pik2video/gui/editor/export_dialog.py
@@ -4845,12 +5501,9 @@ import logging
 import subprocess
 from pathlib import Path
 
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-    QProgressBar, QPushButton
-)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout
 
 logger = logging.getLogger(__name__)
 
@@ -5029,6 +5682,7 @@ class ExportDialog(QDialog):
             self.cancel_requested.emit()
         super().closeEvent(event)
 
+
 ======================================================================
 # src/pik2video/gui/editor/export_service.py
 ======================================================================
@@ -5082,6 +5736,14 @@ ROTATION_FILTER = {
     90: "transpose=1",
     180: "transpose=1,transpose=1",
     270: "transpose=2",
+}
+
+ASPECT_RATIOS = {
+    "16:9": (16, 9),
+    "9:16": (9, 16),
+    "1:1":  (1, 1),
+    "4:5":  (4, 5),
+    "4:3":  (4, 3),
 }
 
 
@@ -5154,16 +5816,25 @@ class ExportService(QObject):
         if end > 0 and (duration <= 0 or end < duration):
             args += ["-to", f"{end:.3f}"]
 
+
         filters = []
 
-        height = RESOLUTION_HEIGHT.get(state.get_resolution())
-        if height:
-            filters.append(f"scale=-2:{height}")
-
+        # 1. Rotation
         rot_filter = ROTATION_FILTER.get(state.get_rotation())
         if rot_filter:
             filters.append(rot_filter)
 
+        # 2. Aspect (crop / pad)
+        aspect_filter = self._build_aspect_filter(state)
+        if aspect_filter:
+            filters.append(aspect_filter)
+
+        # 3. Resolution
+        height = RESOLUTION_HEIGHT.get(state.get_resolution())
+        if height:
+            filters.append(f"scale=-2:{height}")
+
+        # 4. Speed
         speed = state.get_speed()
         if speed != 1.0:
             filters.append(f"setpts=PTS/{speed}")
@@ -5283,6 +5954,44 @@ class ExportService(QObject):
         parts.append(f"atempo={remaining}")
         return ",".join(parts)
 
+
+    def _build_aspect_filter(self, state: EditorState) -> str:
+        """Собрать фильтр crop/pad по пресету кадра."""
+        preset = state.get_aspect_preset()
+        if preset == "original" or preset not in ASPECT_RATIOS:
+            return ""
+
+        src_w, src_h = state.get_source_resolution()
+        if src_w <= 0 or src_h <= 0:
+            logger.warning("Разрешение источника неизвестно — фильтр aspect пропущен")
+            return ""
+
+        ratio_w, ratio_h = ASPECT_RATIOS[preset]
+        target_ratio = ratio_w / ratio_h
+        src_ratio = src_w / src_h
+        mode = state.get_aspect_mode()
+
+        if mode == "pad":
+            if src_ratio >= target_ratio:
+                W = src_w & ~1
+                H = int(src_w / target_ratio) & ~1
+            else:
+                W = int(src_h * target_ratio) & ~1
+                H = src_h & ~1
+            return (
+                f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
+                f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black"
+            )
+
+        if src_ratio >= target_ratio:
+            H = src_h & ~1
+            W = int(src_h * target_ratio) & ~1
+        else:
+            W = src_w & ~1
+            H = int(src_w / target_ratio) & ~1
+
+        return f"crop={W}:{H}:(iw-{W})/2:(ih-{H})/2"
+
 ======================================================================
 # src/pik2video/gui/editor/frame_preview.py
 ======================================================================
@@ -5302,8 +6011,8 @@ class ExportService(QObject):
 
 import logging
 
-from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout, QApplication
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 
 logger = logging.getLogger(__name__)
 
@@ -5367,6 +6076,7 @@ class FramePreview(QWidget):
     def hide_preview(self):
         self.hide()
 
+
 ======================================================================
 # src/pik2video/gui/editor/global_settings_panel.py
 ======================================================================
@@ -5386,17 +6096,16 @@ class FramePreview(QWidget):
 
 import logging
 
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
+from src.pik2video.gui.common.tooltip import set_tooltips_enabled
 from src.pik2video.gui.widgets.global_settings import (
+    AlwaysOnTopSetting,
+    AutoHideEditorSetting,
     LanguageSetting,
     TextSizeSetting,
     TooltipsSetting,
-    AlwaysOnTopSetting,
-    AutoHideEditorSetting,
 )
-from src.pik2video.gui.common.tooltip import set_tooltips_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -5509,6 +6218,7 @@ class GlobalSettingsPanel(QWidget):
         self.controller.set_auto_hide_editor(value)
         self.controller.save_settings()
 
+
 ======================================================================
 # src/pik2video/gui/editor/player.py
 ======================================================================
@@ -5530,15 +6240,20 @@ class GlobalSettingsPanel(QWidget):
 
 import logging
 
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
-    QLabel, QPushButton, QSlider, QSizePolicy
-)
-from PySide6.QtCore import Qt, Signal, QUrl
+from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QPixmap
-
-from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QSlider,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from .volume import VolumeControl
 
@@ -5548,11 +6263,20 @@ SPEED_PRESETS = [0.5, 0.75, 1.0, 1.5, 2.0]
 
 SEEK_STEP_SEC = 5
 
+ASPECT_RATIOS = {
+    "16:9": (16, 9),
+    "9:16": (9, 16),
+    "1:1":  (1, 1),
+    "4:5":  (4, 5),
+    "4:3":  (4, 3),
+}
+
 class PlayerWidget(QWidget):
     """Плеер с placeholder-страницей и страницей видео."""
 
     position_changed = Signal(float)   # секунды
     duration_changed = Signal(float)   # секунды
+    source_resolution_changed = Signal(int, int)   # ширина, высота
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -5567,6 +6291,7 @@ class PlayerWidget(QWidget):
         self._last_frame = None
         self._keep_frames = True   # кэшировать кадры
         self._pending_play = False  # идёт seek от кнопки ▶
+        self._aspect_preset = "original"
 
         self._stack = QStackedWidget(self)
 
@@ -5592,6 +6317,7 @@ class PlayerWidget(QWidget):
         self._player.positionChanged.connect(self._on_position_changed)
         self._player.durationChanged.connect(self._on_duration_changed)
         self._player.playbackStateChanged.connect(self._on_state_changed)
+        self._player.metaDataChanged.connect(self._on_meta_data_changed)
 
         self._show_placeholder()
 
@@ -5614,16 +6340,18 @@ class PlayerWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
-        self._video_widget = QVideoWidget()
+        self._video_area = QWidget()
+        self._video_area.setStyleSheet("background-color: #000;")
+        self._video_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(self._video_area, stretch=1)
+
+        self._video_widget = QVideoWidget(self._video_area)
         self._video_widget.setStyleSheet("background-color: #000;")
-        self._video_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        layout.addWidget(self._video_widget, stretch=1)
 
         controls = self._build_controls()
         layout.addWidget(controls, stretch=0)
 
         return page
-
     def _build_controls(self) -> QWidget:
         bar = QWidget()
         bar.setFixedHeight(32)
@@ -5840,6 +6568,42 @@ class PlayerWidget(QWidget):
         if not value:
             self._last_frame = None
 
+    def set_aspect_preset(self, preset: str):
+        """Установить пресет пропорций. Сразу пересчитать раскладку."""
+        self._aspect_preset = preset if preset in ASPECT_RATIOS or preset == "original" else "original"
+        self._relayout_video()
+
+    def _relayout_video(self):
+        """Пересчитать позицию и размер QVideoWidget под текущий пресет."""
+        if not hasattr(self, "_video_area"):
+            return
+
+        area = self._video_area
+        aw = area.width()
+        ah = area.height()
+        if aw <= 0 or ah <= 0:
+            return
+
+        if self._aspect_preset == "original":
+            self._video_widget.setGeometry(0, 0, aw, ah)
+            return
+
+        pw, ph = ASPECT_RATIOS[self._aspect_preset]
+        target_ratio = pw / ph
+        area_ratio = aw / ah
+
+        if target_ratio >= area_ratio:
+            w = aw
+            h = int(aw / target_ratio)
+        else:
+            h = ah
+            w = int(ah * target_ratio)
+
+        x = (aw - w) // 2
+        y = (ah - h) // 2
+
+        self._video_widget.setGeometry(x, y, w, h)
+
     def _on_video_frame(self, frame):
         """Сохранить последний кадр для превью (только когда нужно)."""
         if not self._keep_frames:
@@ -5851,6 +6615,10 @@ class PlayerWidget(QWidget):
             return
         self._last_frame = QPixmap.fromImage(image)
 
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._relayout_video()
 
     def _show_placeholder(self):
         self._stack.setCurrentIndex(0)
@@ -5911,6 +6679,18 @@ class PlayerWidget(QWidget):
         )
         self.duration_changed.emit(ms / 1000.0)
 
+    def _on_meta_data_changed(self):
+        """Прочитать разрешение из метаданных и эмитить сигнал."""
+        meta = self._player.metaData()
+        if not meta:
+            return
+
+        from PySide6.QtMultimedia import QMediaMetaData
+        resolution = meta.value(QMediaMetaData.Key.Resolution)
+
+        if resolution is not None and not resolution.isEmpty():
+            self.source_resolution_changed.emit(resolution.width(), resolution.height())
+
     def _on_state_changed(self, state):
         if state == QMediaPlayer.PlayingState:
             self._btn_play.setText("⏸")
@@ -5953,8 +6733,7 @@ class PlayerWidget(QWidget):
     def _on_rewind(self):
         """Перемотать на 5 секунд назад."""
         pos = self._player.position() - SEEK_STEP_SEC * 1000
-        if pos < 0:
-            pos = 0
+        pos = max(pos, 0)
         self._player.setPosition(pos)
 
     def _on_forward(self):
@@ -5976,6 +6755,205 @@ class PlayerWidget(QWidget):
         secs = seconds % 60
         return f"{minutes:02}:{secs:02}"
 
+
+======================================================================
+# src/pik2video/gui/editor/record_menu.py
+======================================================================
+
+# src/pik2video/gui/editor/record_menu.py
+"""
+Меню записи — top-level окно с затемнением.
+
+Отвечает за:
+- затемнение области под топбаром при открытом меню
+- показ кнопок «запись видео / скрин запись / запись звука»
+- публикацию сигналов о выборе
+
+Не знает:
+- что делать после выбора (это EditorWindow)
+"""
+
+import logging
+
+from PySide6.QtCore import QObject, QPoint, Qt, Signal
+from PySide6.QtGui import QColor, QPainter
+from PySide6.QtWidgets import QHBoxLayout, QPushButton, QWidget
+
+logger = logging.getLogger(__name__)
+
+
+class _DimOverlayWindow(QWidget):
+    """Top-level затемнение под топбаром. Клик — сигнал."""
+
+    clicked = Signal()
+
+    def __init__(self):
+        super().__init__(
+            None,
+            Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 140))
+
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+
+
+class _RecordMenuWindow(QWidget):
+    """Top-level меню с тремя кнопками записи."""
+
+    record_video_clicked = Signal()
+    record_screen_clicked = Signal()
+    record_audio_clicked = Signal()
+
+    def __init__(self):
+        super().__init__(
+            None,
+            Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #2a2a2a;
+                border: 2px solid #b8892e;
+                border-radius: 8px;
+            }
+        """)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(4)
+
+        btn_style = """
+            QPushButton {
+                background-color: #3a3a3a;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #e0e0e0;
+                padding: 2px 12px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:pressed { background-color: #2a2a2a; }
+        """
+
+        self.btn_video = QPushButton("запись видео")
+        self.btn_video.setFixedHeight(24)
+        self.btn_video.setStyleSheet(btn_style)
+        self.btn_video.clicked.connect(self.record_video_clicked.emit)
+
+        self.btn_screen = QPushButton("скрин запись")
+        self.btn_screen.setFixedHeight(24)
+        self.btn_screen.setStyleSheet(btn_style)
+        self.btn_screen.clicked.connect(self.record_screen_clicked.emit)
+
+        self.btn_audio = QPushButton("запись звука")
+        self.btn_audio.setFixedHeight(24)
+        self.btn_audio.setStyleSheet(btn_style)
+        self.btn_audio.clicked.connect(self.record_audio_clicked.emit)
+
+        layout.addWidget(self.btn_video)
+        layout.addWidget(self.btn_screen)
+        layout.addWidget(self.btn_audio)
+
+
+class RecordMenuController(QObject):
+    """Управляет открытием/закрытием меню записи."""
+
+    record_video_requested = Signal()
+    record_screen_requested = Signal()
+    record_audio_requested = Signal()
+
+    def __init__(self, editor_window, parent=None):
+        super().__init__(parent)
+        self._editor = editor_window
+
+        self._dim_window = _DimOverlayWindow()
+        self._dim_window.clicked.connect(self.close)
+
+        self._menu_window = _RecordMenuWindow()
+        self._menu_window.record_video_clicked.connect(self._on_video)
+        self._menu_window.record_screen_clicked.connect(self._on_screen)
+        self._menu_window.record_audio_clicked.connect(self._on_audio)
+
+
+    def is_open(self) -> bool:
+        return self._menu_window.isVisible()
+
+    def toggle(self, checked: bool):
+        if checked:
+            self.open()
+        else:
+            self.close()
+
+    def open(self):
+        if self._menu_window.isVisible():
+            return
+
+        editor = self._editor
+        top_bar = editor.top_bar
+        top_bar_h = top_bar.height()
+
+        editor_global = editor.mapToGlobal(QPoint(0, 0))
+        self._dim_window.setGeometry(
+            editor_global.x(),
+            editor_global.y() + top_bar_h,
+            editor.width(),
+            editor.height() - top_bar_h,
+        )
+        self._dim_window.show()
+
+        self._menu_window.adjustSize()
+        menu_w = self._menu_window.sizeHint().width()
+        menu_h = self._menu_window.sizeHint().height()
+
+        btn_global = top_bar.btn_record.mapToGlobal(QPoint(0, 0))
+        menu_x = btn_global.x() - menu_w - 4
+        menu_y = btn_global.y() + (top_bar.btn_record.height() - menu_h) // 2
+
+        self._menu_window.move(menu_x, menu_y)
+        self._menu_window.show()
+
+        top_bar.btn_settings.setEnabled(False)
+
+    def close(self):
+        self._dim_window.hide()
+        self._menu_window.hide()
+
+        top_bar = self._editor.top_bar
+        top_bar.btn_settings.setEnabled(True)
+
+        top_bar.btn_record.blockSignals(True)
+        top_bar.btn_record.setChecked(False)
+        top_bar.btn_record.blockSignals(False)
+
+    def hide_windows(self):
+        """Скрыть и освободить top-level окна при закрытии редактора."""
+        for w in (self._dim_window, self._menu_window):
+            try:
+                w.hide()
+                w.deleteLater()
+            except Exception:
+                pass
+
+
+    def _on_video(self):
+        self.close()
+        self.record_video_requested.emit()
+
+    def _on_screen(self):
+        self.close()
+        self.record_screen_requested.emit()
+
+    def _on_audio(self):
+        self.close()
+        self.record_audio_requested.emit()
+
+
 ======================================================================
 # src/pik2video/gui/editor/state.py
 ======================================================================
@@ -5996,6 +6974,7 @@ class PlayerWidget(QWidget):
 - про FFmpeg
 """
 
+import json
 import logging
 from pathlib import Path
 from typing import Optional
@@ -6044,10 +7023,18 @@ class EditorState(QObject):
         self._rotation: int = 0
         self._speed: float = 1.0
 
+        self._aspect_preset: str = "original"   # original / 16:9 / 9:16 / 1:1 / 4:5 / 4:3
+        self._aspect_mode: str = "crop"         # crop / pad
+
         self._export_filename: str = ""
         self._export_path: str = str(Path.home() / "Desktop" / "output_file")
 
+        self._source_resolution: tuple = (0, 0)   # (width, height)
         self._is_exporting: bool = False
+
+        self._persist_path = Path.home() / ".pik2video" / "editor_files.json"
+        self._loading = False
+        self.videos_changed.connect(self._save_files)
 
 
     def add_video_file(self, path: str, duration: float = 0.0):
@@ -6135,6 +7122,7 @@ class EditorState(QObject):
         self._trims.clear()
         self._active_index = -1
         self._position = 0.0
+        self._source_resolution = (0, 0)
 
         self.videos_changed.emit()
         self.video_unloaded.emit()
@@ -6201,9 +7189,8 @@ class EditorState(QObject):
         path = self._video_files[self._active_index]
         duration = self._video_durations.get(path, 0.0)
 
-        if start < 0:
-            start = 0
-        if end > duration and duration > 0:
+        start = max(start, 0)
+        if end > duration > 0:
             end = duration
         if start >= end:
             return
@@ -6241,6 +7228,18 @@ class EditorState(QObject):
         logger.debug(f"Разрешение в EditorState: {value}")
         self.settings_changed.emit()
 
+    def set_source_resolution(self, width: int, height: int):
+        if width <= 0 or height <= 0:
+            return
+        if (width, height) == self._source_resolution:
+            return
+        self._source_resolution = (width, height)
+        logger.debug(f"Разрешение источника: {width}×{height}")
+        self.settings_changed.emit()
+
+    def get_source_resolution(self) -> tuple:
+        return self._source_resolution
+
     def get_bitrate_mode(self) -> str:
         return self._bitrate_mode
 
@@ -6267,6 +7266,31 @@ class EditorState(QObject):
 
     def get_speed(self) -> float:
         return self._speed
+
+    def get_aspect_preset(self) -> str:
+        return self._aspect_preset
+
+    def set_aspect_preset(self, value: str):
+        allowed = {"original", "16:9", "9:16", "1:1", "4:5", "4:3"}
+        if value not in allowed:
+            return
+        if value == self._aspect_preset:
+            return
+        self._aspect_preset = value
+        logger.debug(f"Пресет кадра: {value}")
+        self.settings_changed.emit()
+
+    def get_aspect_mode(self) -> str:
+        return self._aspect_mode
+
+    def set_aspect_mode(self, value: str):
+        if value not in ("crop", "pad"):
+            return
+        if value == self._aspect_mode:
+            return
+        self._aspect_mode = value
+        logger.debug(f"Режим кадра: {value}")
+        self.settings_changed.emit()
 
     def set_speed(self, value: float):
         if value == self._speed:
@@ -6307,6 +7331,69 @@ class EditorState(QObject):
     def is_exporting(self) -> bool:
         return self._is_exporting
 
+
+
+    def _save_files(self):
+        """Сохранить список файлов в JSON (кроме черновиков)."""
+        if self._loading:
+            return
+        try:
+            self._persist_path.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                "files": list(self._video_files),
+                "active_index": self._active_index,
+            }
+            with open(self._persist_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            logger.debug(f"Список файлов сохранён: {len(self._video_files)} шт.")
+        except Exception as e:
+            logger.warning(f"Не удалось сохранить список файлов: {e}")
+
+    def load_persisted_files(self):
+        """Загрузить сохранённый список файлов при старте редактора."""
+        if not self._persist_path.exists():
+            return
+
+        try:
+            with open(self._persist_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            logger.warning(f"Не удалось прочитать список файлов: {e}")
+            return
+
+        self._loading = True
+        try:
+            for path in data.get("files", []):
+                if not Path(path).exists():
+                    logger.debug(f"Файл исчез, пропускаем: {path}")
+                    continue
+                if path in self._video_files:
+                    continue
+
+                self._video_files.append(path)
+                self._video_durations[path] = 0.0
+                self._trims[path] = (0.0, 0.0)
+
+            if not self._video_files:
+                return
+
+            saved_idx = data.get("active_index", len(self._video_files) - 1)
+            if saved_idx < 0 or saved_idx >= len(self._video_files):
+                saved_idx = len(self._video_files) - 1
+            self._active_index = saved_idx
+
+            active_path = self._video_files[self._active_index]
+
+            self.videos_changed.emit()
+            self.active_video_changed.emit(active_path)
+            self.video_loaded.emit(active_path)
+            self.trim_changed.emit(*self._trims[active_path])
+
+            logger.info(f"Восстановлено файлов: {len(self._video_files)}")
+        finally:
+            self._loading = False
+
+
 ======================================================================
 # src/pik2video/gui/editor/timeline.py
 ======================================================================
@@ -6328,9 +7415,9 @@ class EditorState(QObject):
 
 import logging
 
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Qt, Signal, QRectF, QPointF
-from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPolygonF
 
 logger = logging.getLogger(__name__)
 
@@ -6510,6 +7597,7 @@ class TimelineWidget(QWidget):
         ])
         painter.drawPolygon(bottom_tri)
 
+
 ======================================================================
 # src/pik2video/gui/editor/tools/__init__.py
 ======================================================================
@@ -6521,16 +7609,20 @@ class TimelineWidget(QWidget):
 Каждый инструмент — отдельный виджет, отвечающий только за свой параметр.
 """
 
+from .bitrate import BitrateTool
 from .format import FormatTool
 from .resolution import ResolutionTool
-from .bitrate import BitrateTool
 from .rotation import RotationTool
 from .speed import SpeedTool
 
 __all__ = [
-    "FormatTool", "ResolutionTool", "BitrateTool",
-    "RotationTool", "SpeedTool",
+    "BitrateTool",
+    "FormatTool",
+    "ResolutionTool",
+    "RotationTool",
+    "SpeedTool",
 ]
+
 
 ======================================================================
 # src/pik2video/gui/editor/tools/bitrate.py
@@ -6552,9 +7644,9 @@ __all__ = [
 
 import logging
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QMenu, QLineEdit
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QHBoxLayout, QLineEdit, QMenu, QPushButton, QWidget
 
 logger = logging.getLogger(__name__)
 
@@ -6654,6 +7746,7 @@ class BitrateTool(QWidget):
     def get_value(self) -> str:
         return self._value
 
+
 ======================================================================
 # src/pik2video/gui/editor/tools/format.py
 ======================================================================
@@ -6674,9 +7767,9 @@ class BitrateTool(QWidget):
 
 import logging
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QMenu
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QHBoxLayout, QMenu, QPushButton, QWidget
 
 logger = logging.getLogger(__name__)
 
@@ -6744,6 +7837,7 @@ class FormatTool(QWidget):
         logger.debug(f"Формат: {fmt}")
         self.valueChanged.emit(fmt)
 
+
 ======================================================================
 # src/pik2video/gui/editor/tools/resolution.py
 ======================================================================
@@ -6764,11 +7858,12 @@ class FormatTool(QWidget):
 
 import logging
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QMenu
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QHBoxLayout, QMenu, QPushButton, QWidget
 
 logger = logging.getLogger(__name__)
+
 
 RESOLUTIONS = {
     "original": "Оригинал",
@@ -6777,18 +7872,21 @@ RESOLUTIONS = {
     "480p": "480p",
 }
 
+
 class ResolutionTool(QWidget):
     """Кнопка-меню для выбора разрешения."""
+
     valueChanged = Signal(str)
 
     def __init__(self, initial: str = "original", parent=None):
         super().__init__(parent)
         self._current = initial if initial in RESOLUTIONS else "original"
+        self._source_resolution = (0, 0)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        self._btn = QPushButton(RESOLUTIONS[self._current])
+        self._btn = QPushButton(self._format_text())
         self._btn.setFixedSize(106, 26)
 
         self._btn.setFocusPolicy(Qt.NoFocus)
@@ -6823,6 +7921,23 @@ class ResolutionTool(QWidget):
         self._btn.setMenu(self._menu)
         layout.addWidget(self._btn)
 
+    def _format_text(self) -> str:
+        """Текст на кнопке: реальное разрешение для «Оригинала», пресет для остальных."""
+        if self._current == "original":
+            w, h = self._source_resolution
+            if w > 0 and h > 0:
+                return f"{w}×{h}"
+            return "—"
+        return RESOLUTIONS.get(self._current, "—")
+
+    def _update_button_text(self):
+        self._btn.setText(self._format_text())
+
+    def set_source_resolution(self, width: int, height: int):
+        """Обновить реальное разрешение источника."""
+        self._source_resolution = (width, height)
+        self._update_button_text()
+
     def get_value(self) -> str:
         return self._current
 
@@ -6832,9 +7947,10 @@ class ResolutionTool(QWidget):
         if self._current == value:
             return
         self._current = value
-        self._btn.setText(RESOLUTIONS[value])
+        self._update_button_text()
         logger.debug(f"Разрешение: {value}")
         self.valueChanged.emit(value)
+
 
 ======================================================================
 # src/pik2video/gui/editor/tools/rotation.py
@@ -6856,9 +7972,9 @@ class ResolutionTool(QWidget):
 
 import logging
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QMenu
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QHBoxLayout, QMenu, QPushButton, QWidget
 
 logger = logging.getLogger(__name__)
 
@@ -6931,6 +8047,7 @@ class RotationTool(QWidget):
         logger.debug(f"Поворот: {angle}°")
         self.valueChanged.emit(angle)
 
+
 ======================================================================
 # src/pik2video/gui/editor/tools/speed.py
 ======================================================================
@@ -6948,8 +8065,10 @@ class RotationTool(QWidget):
 - про FFmpeg
 """
 import logging
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel
+
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
+
 logger = logging.getLogger(__name__)
 
 SPEED_PRESETS = [0.25, 0.5, 1.0, 2.0, 4.0]
@@ -7046,6 +8165,7 @@ class SpeedTool(QWidget):
             self._label.setText(self._format(speed))
             self._update_buttons()
 
+
 ======================================================================
 # src/pik2video/gui/editor/tools_panel.py
 ======================================================================
@@ -7063,18 +8183,13 @@ class SpeedTool(QWidget):
 import logging
 from datetime import timedelta
 
-from PySide6.QtWidgets import (
-    QFrame, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QLabel, QWidget, QStackedWidget
-)
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QStackedWidget, QVBoxLayout, QWidget
 
 from .global_settings_panel import GlobalSettingsPanel
-
-
+from .tools.bitrate import BitrateTool
 from .tools.format import FormatTool
 from .tools.resolution import ResolutionTool
-from .tools.bitrate import BitrateTool
 from .tools.rotation import RotationTool
 from .tools.speed import SpeedTool
 
@@ -7089,26 +8204,37 @@ LABEL_WIDTH = 70
 class ToolsPanel(QFrame):
     """Левая колонка с инструментами и блоком «Информация»."""
 
+
     def __init__(self, state, controller, parent=None):
         super().__init__(parent)
         self.state = state
         self.controller = controller
 
         self.setFrameShape(QFrame.NoFrame)
-        self.setStyleSheet("""
-            ToolsPanel {
-                background-color: #2a2a2a;
-                border: 1px solid #444;
-            }
-        """)
+        self.setStyleSheet("ToolsPanel { background: transparent; border: none; }")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
+        root.setSpacing(6)
+
+        self._main_zone = QFrame()
+        self._main_zone.setStyleSheet("""
+            QFrame {
+                background-color: #2a2a2a;
+                border: 1px solid #444;
+                border-top-left-radius: 0px;
+                border-top-right-radius: 0px;
+                border-bottom-left-radius: 4px;
+                border-bottom-right-radius: 4px;
+            }
+        """)
+        main_layout = QVBoxLayout(self._main_zone)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
         self._stack = QStackedWidget()
         self._stack.setStyleSheet("background: transparent; border: none;")
-        root.addWidget(self._stack)
+        main_layout.addWidget(self._stack)
 
         tools_page = QWidget()
         tools_page.setStyleSheet("background: transparent; border: none;")
@@ -7170,6 +8296,11 @@ class ToolsPanel(QFrame):
 
         self._stack.setCurrentIndex(0)
 
+        root.addWidget(self._main_zone, stretch=1)
+
+        self.app_info_block = self._build_app_info_block()
+        root.addWidget(self.app_info_block, stretch=0)
+
         self.state.videos_changed.connect(self._update_all)
         self.state.active_video_changed.connect(lambda _: self._update_all())
         self.state.video_loaded.connect(lambda _: self._update_all())
@@ -7223,25 +8354,14 @@ class ToolsPanel(QFrame):
                 background-color: #151515;
                 border: none;
                 border-top: 1px solid #000;
+                border-bottom-left-radius: 4px;
+                border-bottom-right-radius: 4px;
             }
         """)
 
         layout = QVBoxLayout(block)
         layout.setContentsMargins(10, 8, 10, 8)
         layout.setSpacing(2)
-
-        self.lbl_duration = QLabel("Длительность:  --")
-        self.lbl_size = QLabel("Размер:        --")
-        self.lbl_resolution = QLabel("Разрешение:    --")
-
-        for lbl in (self.lbl_duration, self.lbl_size, self.lbl_resolution):
-            lbl.setStyleSheet(
-                "color: #888; font-size: 11px; "
-                "background: transparent; border: none;"
-            )
-            layout.addWidget(lbl)
-
-        layout.addSpacing(8)
 
         speed_row = QWidget()
         speed_row.setStyleSheet("background: transparent; border: none;")
@@ -7260,8 +8380,53 @@ class ToolsPanel(QFrame):
         self.speed_tool = SpeedTool(initial=self.state.get_speed())
         self.speed_tool.valueChanged.connect(self.state.set_speed)
         speed_layout.addWidget(self.speed_tool)
-
         layout.addWidget(speed_row)
+        layout.addSpacing(8)
+
+        self.lbl_duration = QLabel("Длительность:  --")
+        self.lbl_size = QLabel("Размер:        --")
+
+        for lbl in (self.lbl_duration, self.lbl_size):
+            lbl.setStyleSheet(
+                "color: #888; font-size: 11px; "
+                "background: transparent; border: none;"
+            )
+            layout.addWidget(lbl)
+        
+
+        return block
+
+
+        
+
+    def _build_app_info_block(self) -> QFrame:
+        """Подвал панели: 'ffmpeg + pik2video' в три строки."""
+        block = QFrame()
+        block.setStyleSheet("""
+            QFrame {
+                background-color: #151515;
+                border: 1px solid #444;
+                border-radius: 4px;
+            }
+        """)
+
+        layout = QVBoxLayout(block)
+        layout.setContentsMargins(0, 4, 0, 4)
+        layout.setSpacing(0)
+
+        self.app_info_label = QLabel(
+            '<div style="line-height: 100%;">'
+            '<span style="color: #8b1a1a; font-weight: 600;">FFmpeg</span><br>'
+            '<span style="color: #888;">+</span><br>'
+            '<span style="color: #5fbfbf; font-weight: 600;">Pik2Video</span>'
+            '</div>'
+        )
+        self.app_info_label.setTextFormat(Qt.RichText)
+        self.app_info_label.setAlignment(Qt.AlignCenter)
+        self.app_info_label.setStyleSheet(
+            "font-size: 10px; background: transparent; border: none;"
+        )
+        layout.addWidget(self.app_info_label)
 
         return block
 
@@ -7271,6 +8436,10 @@ class ToolsPanel(QFrame):
         for stack in self._tool_stacks:
             stack.setCurrentIndex(0 if has_file else 1)
         self.speed_tool.setEnabled(has_file)
+
+        w, h = self.state.get_source_resolution()
+        self.resolution_tool.set_source_resolution(w, h)
+
         self._update_info()
 
     def _update_info(self):
@@ -7278,7 +8447,6 @@ class ToolsPanel(QFrame):
         if not self.state.has_videos():
             self.lbl_duration.setText("Длительность:  --")
             self.lbl_size.setText("Размер:        --")
-            self.lbl_resolution.setText("Разрешение:    --")
             return
 
         start, end = self.state.get_trim()
@@ -7298,7 +8466,6 @@ class ToolsPanel(QFrame):
         except Exception:
             self.lbl_size.setText("Размер:        --")
 
-        self.lbl_resolution.setText("Разрешение:    --")
 
     @staticmethod
     def _format_duration(seconds: float) -> str:
@@ -7323,6 +8490,296 @@ class ToolsPanel(QFrame):
         gb = mb / 1024
         return f"{gb:.2f} GB"
 
+
+======================================================================
+# src/pik2video/gui/editor/top_bar.py
+======================================================================
+
+# src/pik2video/gui/editor/top_bar.py
+"""
+Верхняя панель редактора.
+
+Содержит:
+- блок с кнопками ⚙️ / 🛠️ (слева)
+- панель пресетов кадра (по центру, скрыта по умолчанию)
+- кнопку «⚫ Запись» (справа)
+
+Публикует сигналы:
+- tools_clicked / settings_clicked
+- preset_changed
+- record_toggled
+"""
+
+import logging
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
+    QButtonGroup, QHBoxLayout, QLabel, QPushButton, QWidget
+)
+
+logger = logging.getLogger(__name__)
+
+
+TOP_BAR_HEIGHT = 32
+TOOLS_BLOCK_WIDTH = 200
+
+PRESETS = [
+    ("Ориг", "original"),
+    ("16:9", "16:9"),
+    ("9:16", "9:16"),
+    ("1:1",  "1:1"),
+    ("4:5",  "4:5"),
+    ("4:3",  "4:3"),
+]
+
+
+class TopBar(QWidget):
+    """Верхняя полоска редактора."""
+
+    tools_clicked = Signal()
+    settings_clicked = Signal()
+    preset_changed = Signal(str)
+    aspect_mode_changed = Signal(str)
+    record_toggled = Signal(bool)
+
+    def __init__(self, tools_block_width: int = TOOLS_BLOCK_WIDTH, parent=None):
+        super().__init__(parent)
+        self._tools_block_width = tools_block_width
+
+        self.setFixedHeight(TOP_BAR_HEIGHT)
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #2a2a2a;
+                border: 1px solid #444;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                border-bottom-left-radius: 0px;
+                border-bottom-right-radius: 4px;
+            }
+        """)
+
+        self._build_ui()
+
+
+    def _build_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 2, 4, 2)
+        layout.setSpacing(4)
+
+        self.tools_block = self._build_tools_block()
+        layout.addWidget(self.tools_block)
+        layout.addStretch()
+
+        self.presets_panel = self._build_presets_panel()
+        layout.addWidget(self.presets_panel)
+        layout.addStretch()
+
+        self.btn_record = self._build_record_button()
+        layout.addWidget(self.btn_record)
+
+    def _build_tools_block(self) -> QWidget:
+        block = QWidget()
+        block.setFixedWidth(self._tools_block_width)
+        block.setStyleSheet("""
+            QWidget {
+                background: transparent;
+                border: 1px solid #555;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                border-bottom-left-radius: 0px;
+                border-bottom-right-radius: 0px;
+            }
+        """)
+
+        layout = QHBoxLayout(block)
+        layout.setContentsMargins(4, 0, 4, 0)
+        layout.setSpacing(4)
+
+        btn_style = """
+            QPushButton {
+                background-color: #3a3a3a;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #e0e0e0;
+                font-size: 13px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:pressed { background-color: #2a2a2a; }
+            QPushButton:checked {
+                background-color: #5a5a5a;
+                border-color: #888;
+            }
+        """
+
+        self.btn_settings = QPushButton("⚙️")
+        self.btn_settings.setFixedSize(28, 24)
+        self.btn_settings.setCheckable(True)
+        self.btn_settings.setStyleSheet(btn_style)
+        self.btn_settings.clicked.connect(self._on_settings_btn_clicked)
+        layout.addWidget(self.btn_settings)
+
+        layout.addStretch()
+
+        self.btn_tools = QPushButton("🛠️")
+        self.btn_tools.setFixedSize(28, 24)
+        self.btn_tools.setCheckable(True)
+        self.btn_tools.setChecked(True)
+        self.btn_tools.setStyleSheet(btn_style)
+        self.btn_tools.clicked.connect(self._on_tools_btn_clicked)
+        layout.addWidget(self.btn_tools)
+
+        return block
+
+    def _build_presets_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setStyleSheet("background: transparent; border: none;")
+        panel.setVisible(False)
+
+        layout = QHBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        btn_style = """
+            QPushButton {
+                background-color: #3a3a3a;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #e0e0e0;
+                padding: 2px 10px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:pressed { background-color: #2a2a2a; }
+            QPushButton:checked {
+                background-color: #5a5a5a;
+                border-color: #d4a843;
+            }
+        """
+
+        self._preset_group = QButtonGroup(panel)
+        self._preset_group.setExclusive(True)
+
+        self.preset_buttons = {}
+        for label, key in PRESETS:
+            btn = QPushButton(label)
+            btn.setFixedHeight(24)
+            btn.setCheckable(True)
+            btn.setStyleSheet(btn_style)
+            btn.setFocusPolicy(Qt.NoFocus)
+            btn.clicked.connect(
+                lambda checked=False, k=key: self._on_preset_clicked(k)
+            )
+            self._preset_group.addButton(btn)
+            self.preset_buttons[key] = btn
+            layout.addWidget(btn)
+
+        self.preset_buttons["original"].setChecked(True)
+
+        layout.addSpacing(16)
+        divider = QLabel("|")
+        divider.setStyleSheet(
+            "color: #555; font-size: 14px; "
+            "background: transparent; border: none;"
+        )
+        layout.addWidget(divider)
+        layout.addSpacing(16)
+
+        mode_style = """
+            QPushButton {
+                background-color: #3a3a3a;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #e0e0e0;
+                padding: 2px 8px;
+                font-size: 13px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:pressed { background-color: #2a2a2a; }
+            QPushButton:checked {
+                background-color: #5a5a5a;
+                border-color: #d4a843;
+            }
+        """
+
+        self._mode_group = QButtonGroup(panel)
+        self._mode_group.setExclusive(True)
+
+        self.btn_crop = QPushButton("✂️")
+        self.btn_crop.setFixedSize(30, 24)
+        self.btn_crop.setCheckable(True)
+        self.btn_crop.setChecked(True)
+        self.btn_crop.setStyleSheet(mode_style)
+        self.btn_crop.setFocusPolicy(Qt.NoFocus)
+        self.btn_crop.setToolTip("Обрезать по краям")
+        self.btn_crop.clicked.connect(lambda: self._on_mode_clicked("crop"))
+        self._mode_group.addButton(self.btn_crop)
+        layout.addWidget(self.btn_crop)
+
+        self.btn_pad = QPushButton("⬛")
+        self.btn_pad.setFixedSize(30, 24)
+        self.btn_pad.setCheckable(True)
+        self.btn_pad.setStyleSheet(mode_style)
+        self.btn_pad.setFocusPolicy(Qt.NoFocus)
+        self.btn_pad.setToolTip("Дополнить фоном")
+        self.btn_pad.clicked.connect(lambda: self._on_mode_clicked("pad"))
+        self._mode_group.addButton(self.btn_pad)
+        layout.addWidget(self.btn_pad)
+
+        return panel
+
+    def _build_record_button(self) -> QPushButton:
+        btn = QPushButton(" ⚫  Запись ")
+        btn.setFixedHeight(24)
+        btn.setCheckable(True)
+        btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3a3a3a;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #e0e0e0;
+                padding: 2px 12px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:pressed { background-color: #2a2a2a; }
+            QPushButton:checked {
+                background-color: #5a5a5a;
+                border-color: #888;
+            }
+        """)
+        btn.toggled.connect(self.record_toggled.emit)
+        return btn
+
+
+    def _on_tools_btn_clicked(self):
+        self.btn_tools.setChecked(True)
+        self.btn_settings.setChecked(False)
+        self.tools_clicked.emit()
+
+    def _on_settings_btn_clicked(self):
+        self.btn_settings.setChecked(True)
+        self.btn_tools.setChecked(False)
+        self.settings_clicked.emit()
+
+    def _on_preset_clicked(self, key: str):
+        logger.debug(f"Пресет выбран: {key}")
+        self.preset_changed.emit(key)
+
+    def _on_mode_clicked(self, mode: str):
+        logger.debug(f"Режим кадра: {mode}")
+        self.aspect_mode_changed.emit(mode)
+
+
+    def show_presets(self, visible: bool):
+        self.presets_panel.setVisible(visible)
+
+    def set_aspect_mode(self, mode: str):
+        """Синхронизировать активную кнопку режима с состоянием."""
+        if mode == "crop":
+            self.btn_crop.setChecked(True)
+        elif mode == "pad":
+            self.btn_pad.setChecked(True)
+
+
 ======================================================================
 # src/pik2video/gui/editor/video_files_panel.py
 ======================================================================
@@ -7345,13 +8802,17 @@ class ToolsPanel(QFrame):
 import logging
 from pathlib import Path
 
-from PySide6.QtWidgets import (
-    QFrame, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QWidget,
-    QFileIconProvider, QPushButton
-)
-
-from PySide6.QtCore import Qt, Signal, QFileInfo
+from PySide6.QtCore import QFileInfo, Qt, Signal
 from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import (
+    QFileIconProvider,
+    QFrame,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -7474,6 +8935,7 @@ class VideoFileItem(QFrame):
                     "-",
                 ],
                 capture_output=True,
+                check=False,
                 timeout=5,
             )
 
@@ -7681,6 +9143,7 @@ class VideoFilesPanel(QFrame):
         logger.info(f"Файл принят в список видео: {path}")
         self.file_dropped.emit(path)
 
+
 ======================================================================
 # src/pik2video/gui/editor/volume.py
 ======================================================================
@@ -7701,9 +9164,9 @@ class VideoFilesPanel(QFrame):
 
 import logging
 
-from PySide6.QtWidgets import QWidget, QPushButton, QSlider, QVBoxLayout, QHBoxLayout
-from PySide6.QtCore import Qt, QPoint, QTimer, QEvent
+from PySide6.QtCore import QEvent, QPoint, Qt, QTimer
 from PySide6.QtGui import QCursor
+from PySide6.QtWidgets import QHBoxLayout, QPushButton, QSlider, QVBoxLayout, QWidget
 
 logger = logging.getLogger(__name__)
 
@@ -7884,6 +9347,7 @@ class VolumeControl(QWidget):
         else:
             self._btn.setText("🔊")
 
+
 ======================================================================
 # src/pik2video/gui/editor/window.py
 ======================================================================
@@ -7903,14 +9367,18 @@ class VolumeControl(QWidget):
 import logging
 from pathlib import Path
 
-from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QFrame, QLabel, QSizePolicy, QApplication, QPushButton,
-    QFileDialog, QMessageBox
-)
-
-from PySide6.QtCore import Qt, QPoint, QUrl, Signal
+from PySide6.QtCore import QPoint, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QCloseEvent
+from PySide6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QVBoxLayout,
+    QWidget,
+)
 
 from src.pik2video.gui.common.close_policy import (
     CloseAction,
@@ -7921,35 +9389,25 @@ from src.pik2video.gui.common.close_policy import (
 )
 from src.pik2video.gui.common.dialogs import confirm
 
-from .state import EditorState
-from .drop_zone import DropZone
-from .video_files_panel import VideoFilesPanel
+from .bottom_panel import BottomPanel
+from .crop_mode import CropModeController
+from .drop_area import DropArea
+from .export_controller import ExportController
+from .frame_preview import FramePreview
 from .player import PlayerWidget
+from .record_menu import RecordMenuController
+from .state import EditorState
 from .timeline import TimelineWidget
 from .tools_panel import ToolsPanel
-from .export_dialog import ExportDialog
-from .frame_preview import FramePreview
+from .top_bar import TopBar
 
 logger = logging.getLogger(__name__)
 
 GAP = 4
 
-TOP_BAR_HEIGHT = 32
-
 TOOLS_PANEL_WIDTH = 200
 
-DROP_AREA_WIDTH = 108
-DROP_VIDEO_RATIO = 2   # верхняя часть — 2/3
-DROP_AUDIO_RATIO = 1   # нижняя часть — 1/3
-
-BOTTOM_PANEL_HEIGHT = 44
-EXPORT_NAME_WIDTH = 130
-
 WINDOW_SCREEN_RATIO = 0.88
-
-VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".m4v"}
-AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".flac"}
-
 
 class Zone(QFrame):
     """Отладочный блок зоны — рамка с подписью по центру."""
@@ -7973,84 +9431,7 @@ class Zone(QFrame):
         label.setWordWrap(True)
         layout.addWidget(label)
 
-class _DimOverlayWindow(QWidget):
-    """Top-level затемнение поверх редактора (кроме топбара). Клик — сигнал."""
 
-    clicked = Signal()
-
-    def __init__(self):
-        super().__init__(
-            None,
-            Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-        )
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setAttribute(Qt.WA_ShowWithoutActivating)
-
-    def paintEvent(self, event):
-        from PySide6.QtGui import QPainter, QColor
-        painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 140))
-
-    def mousePressEvent(self, event):
-        self.clicked.emit()
-
-
-class _RecordMenuWindow(QWidget):
-    """Top-level окно с кнопками записи."""
-
-    record_video_clicked = Signal()
-    record_screen_clicked = Signal()
-    record_audio_clicked = Signal()
-
-    def __init__(self):
-        super().__init__(
-            None,
-            Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-        )
-        self.setAttribute(Qt.WA_ShowWithoutActivating)
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #2a2a2a;
-                border: 1px solid #555;
-                border-radius: 6px;
-            }
-        """)
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
-        layout.setSpacing(4)
-
-        btn_style = """
-            QPushButton {
-                background-color: #3a3a3a;
-                border: 1px solid #555;
-                border-radius: 4px;
-                color: #e0e0e0;
-                padding: 4px 12px;
-                font-size: 11px;
-            }
-            QPushButton:hover { background-color: #4a4a4a; }
-            QPushButton:pressed { background-color: #2a2a2a; }
-        """
-
-        self.btn_video = QPushButton("запись видео")
-        self.btn_video.setFixedHeight(26)
-        self.btn_video.setStyleSheet(btn_style)
-        self.btn_video.clicked.connect(self.record_video_clicked.emit)
-
-        self.btn_screen = QPushButton("скрин запись")
-        self.btn_screen.setFixedHeight(26)
-        self.btn_screen.setStyleSheet(btn_style)
-        self.btn_screen.clicked.connect(self.record_screen_clicked.emit)
-
-        self.btn_audio = QPushButton("запись звука")
-        self.btn_audio.setFixedHeight(26)
-        self.btn_audio.setStyleSheet(btn_style)
-        self.btn_audio.clicked.connect(self.record_audio_clicked.emit)
-
-        layout.addWidget(self.btn_video)
-        layout.addWidget(self.btn_screen)
-        layout.addWidget(self.btn_audio)
 
 
 class EditorWindow(QMainWindow):
@@ -8064,22 +9445,11 @@ class EditorWindow(QMainWindow):
         self.controller = controller
         self.state = EditorState(self)
 
-        from .export_service import ExportService
-        self.export_service = ExportService(self)
-        self.export_service.export_started.connect(self._on_export_started)
-        self.export_service.export_progress.connect(self._on_export_progress)
-        self.export_service.export_finished.connect(self._on_export_finished)
-
-        self._export_dialog = None
         self._frame_preview = FramePreview()
 
-        self._dim_window = _DimOverlayWindow()
-        self._dim_window.clicked.connect(self._close_record_menu)
+        self.record_menu = None
+        self.crop_mode = None
 
-        self._menu_window = _RecordMenuWindow()
-        self._menu_window.record_video_clicked.connect(self._on_record_video)
-        self._menu_window.record_screen_clicked.connect(self._on_record_screen)
-        self._menu_window.record_audio_clicked.connect(self._on_record_audio)
 
         self.setWindowTitle("Редактор")
         self.setMinimumSize(1100, 700)
@@ -8087,6 +9457,19 @@ class EditorWindow(QMainWindow):
         self._apply_adaptive_size()
         self._build_ui()
 
+        self.record_menu = RecordMenuController(self)
+        self.record_menu.record_video_requested.connect(self.record_video_requested.emit)
+        self.record_menu.record_screen_requested.connect(self.record_screen_requested.emit)
+        self.record_menu.record_audio_requested.connect(self.record_audio_requested.emit)
+
+        self.crop_mode = CropModeController(self)
+        self.export_controller = ExportController(self, self.state)
+        self.bottom_panel.export_clicked.connect(self.export_controller.start)
+        self.top_bar.record_toggled.connect(self.record_menu.toggle)
+
+        self.state.load_persisted_files()
+
+    
     def _apply_adaptive_size(self):
         """Подгоняет стартовый размер окна под экран: 80% от доступной области."""
         screen = QApplication.primaryScreen()
@@ -8107,256 +9490,6 @@ class EditorWindow(QMainWindow):
         self.resize(width, height)
 
 
-
-    def _build_top_bar(self) -> QWidget:
-        """Верхняя полоска: [⚙️] слева, [⚫ Запись] справа."""
-        bar = QWidget()
-        bar.setFixedHeight(TOP_BAR_HEIGHT)
-        bar.setStyleSheet("""
-            QWidget {
-                background-color: #2a2a2a;
-                border: 1px solid #444;
-                border-radius: 4px;
-            }
-        """)
-
-        layout = QHBoxLayout(bar)
-        layout.setContentsMargins(4, 2, 4, 2)
-        layout.setSpacing(4)
-
-        btn_toolbar_style = """
-            QPushButton {
-                background-color: #3a3a3a;
-                border: 1px solid #555;
-                border-radius: 4px;
-                color: #e0e0e0;
-                font-size: 13px;
-            }
-            QPushButton:hover { background-color: #4a4a4a; }
-            QPushButton:pressed { background-color: #2a2a2a; }
-            QPushButton:checked {
-                background-color: #5a5a5a;
-                border-color: #888;
-            }
-        """
-
-        self.btn_tools = QPushButton("🛠️")
-        self.btn_tools.setFixedSize(28, 24)
-        self.btn_tools.setCheckable(True)
-        self.btn_tools.setChecked(True)
-        self.btn_tools.setStyleSheet(btn_toolbar_style)
-        self.btn_tools.clicked.connect(self._on_tools_clicked)
-        layout.addWidget(self.btn_tools)
-
-        self.btn_settings = QPushButton("⚙️")
-        self.btn_settings.setFixedSize(28, 24)
-        self.btn_settings.setCheckable(True)
-        self.btn_settings.setStyleSheet(btn_toolbar_style)
-        self.btn_settings.clicked.connect(self._on_settings_clicked)
-        layout.addWidget(self.btn_settings)
-
-
-        layout.addStretch()
-
-        self.btn_record = QPushButton(" ⚫  Запись ")
-        self.btn_record.setFixedHeight(24)
-        self.btn_record.setCheckable(True)
-        self.btn_record.setStyleSheet("""
-            QPushButton {
-                background-color: #3a3a3a;
-                border: 1px solid #555;
-                border-radius: 4px;
-                color: #e0e0e0;
-                padding: 2px 12px;
-            }
-            QPushButton:hover { background-color: #4a4a4a; }
-            QPushButton:pressed { background-color: #2a2a2a; }
-            QPushButton:checked {
-                background-color: #5a5a5a;
-                border-color: #888;
-            }
-        """)
-        self.btn_record.toggled.connect(self._on_record_toggled)
-        layout.addWidget(self.btn_record)
-
-        return bar
-
-    
-
-    def _build_drop_area(self) -> QWidget:
-        """Зона 4: колонка из двух областей — видео (2/3) и аудио (1/3)."""
-        container = QWidget()
-        container.setFixedWidth(DROP_AREA_WIDTH)
-        container.setStyleSheet("background: transparent; border: none;")
-
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(GAP)
-
-        self.drop_video = VideoFilesPanel(extensions=VIDEO_EXTENSIONS)
-        self.drop_video.file_dropped.connect(self._on_video_dropped)
-        self.drop_video.file_selected.connect(self._on_video_selected)
-        self.drop_video.delete_requested.connect(self._on_video_delete_requested)
-        layout.addWidget(self.drop_video, stretch=DROP_VIDEO_RATIO)
-
-        self.drop_audio = DropZone(
-            icon="🎵",
-            label="mp3",
-            extensions=AUDIO_EXTENSIONS,
-            with_delete_button=True,
-        )
-        self.drop_audio.file_dropped.connect(self._on_audio_dropped)
-        self.drop_audio.delete_requested.connect(self._on_audio_delete_requested)
-        layout.addWidget(self.drop_audio, stretch=DROP_AUDIO_RATIO)
-
-        return container
-
-
-    def _build_bottom_panel(self) -> QWidget:
-        """Нижняя панель: приподнятое поле экспорта слева, кнопка «Очистить» справа."""
-        panel = QWidget()
-        panel.setFixedHeight(BOTTOM_PANEL_HEIGHT)
-        panel.setStyleSheet("""
-            QWidget {
-                background-color: #2a2a2a;
-                border: 1px solid #444;
-                border-radius: 4px;
-            }
-        """)
-
-        layout = QHBoxLayout(panel)
-        layout.setContentsMargins(6, 2, 0, 2)
-        layout.setSpacing(8)
-
-        self.export_block = QWidget()
-        self.export_block.setStyleSheet("""
-            QWidget {
-                background-color: #383838;
-                border: 1px solid #555;
-                border-radius: 4px;
-            }
-        """)
-
-        export_layout = QHBoxLayout(self.export_block)
-        export_layout.setContentsMargins(8, 2, 4, 2)
-        export_layout.setSpacing(6)
-
-
-        from PySide6.QtWidgets import QLineEdit
-
-        self.export_name_frame = QFrame()
-        self.export_name_frame.setFixedWidth(EXPORT_NAME_WIDTH)
-        self.export_name_frame.setStyleSheet("""
-            QFrame {
-                background-color: #2a2a2a;
-                border: 1px solid #555;
-                border-radius: 4px;
-            }
-        """)
-
-        name_layout = QHBoxLayout(self.export_name_frame)
-        name_layout.setContentsMargins(6, 2, 6, 2)
-        name_layout.setSpacing(0)
-
-        self.export_name_input = QLineEdit()
-        self.export_name_input.setFrame(False)
-        self.export_name_input.setPlaceholderText("имя файла")
-        self.export_name_input.setEnabled(False)
-        self.export_name_input.setStyleSheet("""
-            QLineEdit {
-                background: transparent;
-                border: none;
-                color: #e0e0e0;
-                font-size: 11px;
-                padding: 0px;
-            }
-            QLineEdit:disabled {
-                color: #555;
-                background: transparent;
-            }
-        """)
-        self.export_name_input.textChanged.connect(self.state.set_export_filename)
-
-        self.export_ext_label = QLabel("")
-        self.export_ext_label.setStyleSheet(
-            "color: #666; font-size: 11px; "
-            "background: transparent; border: none;"
-        )
-
-        name_layout.addWidget(self.export_name_input, stretch=1)
-        name_layout.addWidget(self.export_ext_label, stretch=0)
-
-        self.export_path_value = QPushButton("")
-        self.export_path_value.setFlat(True)
-        self.export_path_value.setCursor(Qt.PointingHandCursor)
-        self.export_path_value.clicked.connect(self._on_export_path_clicked)
-
-        self.btn_export = QPushButton("Экспорт")
-
-        self.btn_export.setFixedHeight(24)
-        self.btn_export.setFixedWidth(100)
-        self.btn_export.clicked.connect(self._on_export_clicked)
-
-        self.btn_export.setStyleSheet("""
-            QPushButton {
-                background-color: #2a7a2a;
-                border: 1px solid #3a9a3a;
-                border-radius: 4px;
-                color: white;
-                font-size: 11px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #3a9a3a;
-            }
-            QPushButton:pressed {
-                background-color: #1a5a1a;
-            }
-            QPushButton:disabled {
-                background-color: #2a2a2a;
-                border: 1px solid #444;
-                color: #555;
-            }
-        """)
-
-        export_layout.addWidget(self.export_name_frame, stretch=0)
-        export_layout.addStretch(1)
-        export_layout.addWidget(self.export_path_value, stretch=0)
-        export_layout.addSpacing(12)
-        export_layout.addWidget(self.btn_export, stretch=0)
-
-        layout.addWidget(self.export_block, stretch=1)
-
-        self.clear_frame = QFrame()
-        self.clear_frame.setFixedWidth(DROP_AREA_WIDTH)
-        self.clear_frame.setStyleSheet("""
-            QFrame {
-                background-color: #2a2a2a;
-                border: 2px dashed #555;
-                border-radius: 6px;
-            }
-        """)
-
-        clear_layout = QVBoxLayout(self.clear_frame)
-        clear_layout.setContentsMargins(6, 6, 6, 6)
-        clear_layout.setSpacing(0)
-
-        self.btn_clear = QPushButton("Очистить")
-        self.btn_clear.setFixedHeight(24)
-        self.btn_clear.clicked.connect(self._on_clear_clicked)
-
-        clear_layout.addStretch()
-        clear_layout.addWidget(self.btn_clear)
-
-        layout.addWidget(self.clear_frame, stretch=0)
-
-        self._update_clear_button()
-
-        self._sync_export_path_field()
-
-        return panel
-
-
     def _build_ui(self):
         central = QWidget()
         central.setStyleSheet("background-color: #1e1e1e;")
@@ -8366,7 +9499,7 @@ class EditorWindow(QMainWindow):
         root.setContentsMargins(GAP, GAP, GAP, GAP)
         root.setSpacing(GAP)
 
-        self.top_bar = self._build_top_bar()
+        self.top_bar = TopBar(tools_block_width=TOOLS_PANEL_WIDTH)
         root.addWidget(self.top_bar)
 
         middle = QHBoxLayout()
@@ -8399,13 +9532,27 @@ class EditorWindow(QMainWindow):
 
         upper.addWidget(mx_container, stretch=1)
 
-        self.drop_area = self._build_drop_area()
+        self.drop_area = DropArea()
+        self.drop_area.video_dropped.connect(self._on_video_dropped)
+        self.drop_area.video_selected.connect(self._on_video_selected)
+        self.drop_area.video_delete_requested.connect(self._on_video_delete_requested)
+        self.drop_area.audio_dropped.connect(self._on_audio_dropped)
+        self.drop_area.audio_delete_requested.connect(self._on_audio_delete_requested)
         upper.addWidget(self.drop_area, stretch=0)
 
         right_side.addLayout(upper, stretch=1)
 
-        self.bottom_panel = self._build_bottom_panel()
+
+        self.bottom_panel = BottomPanel()
+        self.bottom_panel.clear_clicked.connect(self._on_clear_clicked)
+
+        self.bottom_panel.export_path_clicked.connect(self._on_export_path_clicked)
+        self.bottom_panel.export_name_changed.connect(self.state.set_export_filename)
         right_side.addWidget(self.bottom_panel, stretch=0)
+
+        self._sync_export_path_field()
+        self._sync_export_name_field()
+
 
         middle.addLayout(right_side, stretch=1)
 
@@ -8420,6 +9567,7 @@ class EditorWindow(QMainWindow):
 
         self.multiplexer.position_changed.connect(self.state.set_position)
         self.multiplexer.duration_changed.connect(self._on_duration_changed)
+        self.multiplexer.source_resolution_changed.connect(self.state.set_source_resolution)
 
         self.state.trim_changed.connect(self.multiplexer.set_trim_range)
 
@@ -8430,7 +9578,14 @@ class EditorWindow(QMainWindow):
         self.timeline.marker_dragged.connect(self._on_marker_dragged)
         self.timeline.marker_drag_finished.connect(self._on_marker_drag_finished)
 
-        self.btn_export.setEnabled(self.state.has_videos())
+        self.top_bar.tools_clicked.connect(self.tools_panel.show_tools)
+        self.top_bar.settings_clicked.connect(self.tools_panel.show_settings)
+        self.top_bar.preset_changed.connect(self.state.set_aspect_preset)
+        self.top_bar.aspect_mode_changed.connect(self.state.set_aspect_mode)
+
+        self.state.settings_changed.connect(self._sync_aspect_preset)
+        self.state.settings_changed.connect(self._sync_aspect_mode)
+
 
         
 
@@ -8447,8 +9602,10 @@ class EditorWindow(QMainWindow):
         """Файл принят в зоне аудио."""
         logger.info(f"Аудио принято: {path}")
         self.state.set_audio_file(path, duration=0.0)
-        self.drop_audio.show_audio(path)
-        self._update_clear_button()
+        self.drop_area.show_audio(path)
+        self.bottom_panel.set_clear_enabled(
+            self.state.has_videos() or self.state.has_audio()
+        )
 
     def _on_video_delete_requested(self):
         """Удаление активного видео с подтверждением."""
@@ -8476,35 +9633,10 @@ class EditorWindow(QMainWindow):
             return
 
         self.state.clear_audio()
-        self._update_clear_button()
+        self.bottom_panel.set_clear_enabled(
+            self.state.has_videos() or self.state.has_audio()
+        )
 
-    def _update_clear_button(self):
-        """Обновить вид кнопки «Очистить»: активна, если есть файлы."""
-        has_files = self.state.has_videos() or self.state.has_audio()
-        self.btn_clear.setEnabled(has_files)
-
-        if has_files:
-            self.btn_clear.setStyleSheet("""
-                QPushButton {
-                    background-color: #5a1a1a;
-                    border: 1px solid #7a2a2a;
-                    border-radius: 4px;
-                    color: #e0c0c0;
-                    font-size: 10px;
-                }
-                QPushButton:hover { background-color: #7a2a2a; }
-                QPushButton:pressed { background-color: #3a0a0a; }
-            """)
-        else:
-            self.btn_clear.setStyleSheet("""
-                QPushButton {
-                    background-color: #2a2a2a;
-                    border: 1px solid #444;
-                    border-radius: 4px;
-                    color: #666;
-                    font-size: 10px;
-                }
-            """)
 
     def _on_clear_clicked(self):
         """Сбросить загруженные файлы с подтверждением."""
@@ -8524,7 +9656,8 @@ class EditorWindow(QMainWindow):
         self.state.clear_video()
         self.state.clear_audio()
 
-        self.drop_audio.show_empty(icon="🎵", label="mp3")
+        self.drop_area.show_audio_empty()
+
     def _delete_draft_if_needed(self, path: str):
         """Удалить файл с диска, если он лежит в папке черновиков."""
         if not path or not self.controller:
@@ -8538,57 +9671,13 @@ class EditorWindow(QMainWindow):
         except Exception as e:
             logger.warning(f"Не удалось удалить черновик {path}: {e}")
 
-
-    def _on_export_clicked(self):
-        """Запустить экспорт через FFmpeg с показом прогресса."""
-        if not self.state.has_videos():
-            QMessageBox.warning(self, "Экспорт", "Нет активного видеофайла.")
-            return
-
-        if self.export_service.is_running():
-            QMessageBox.information(self, "Экспорт", "Экспорт уже идёт.")
-            return
-
-        self.btn_export.setEnabled(False)
-        self.btn_export.setText("Экспорт...")
-
-        self._export_dialog = ExportDialog(self)
-        self._export_dialog.cancel_requested.connect(self._on_export_cancel)
-        self._export_dialog.show()
-
-        self.export_service.start_export(self.state)
-
-    def _on_export_cancel(self):
-        """Пользователь нажал «Отмена» в диалоге."""
-        if self._export_dialog:
-            self._export_dialog.set_cancelling()
-        self.export_service.cancel()
-
-    def _on_export_started(self):
-        logger.info("Экспорт: старт")
-
-    def _on_export_progress(self, percent: int):
-        if self._export_dialog:
-            self._export_dialog.set_progress(percent)
-
-    def _on_export_finished(self, success: bool, message: str):
-        """Экспорт завершён."""
-        self.btn_export.setEnabled(True)
-        self.btn_export.setText("Экспорт")
-
-        if not self._export_dialog:
-            return
-
-        if success:
-            self._export_dialog.show_success(message)
-        else:
-            self._export_dialog.show_error(message)
-
-
     def _on_video_loaded(self, path: str):
         """EditorState сообщил, что активный файл сменился → отдаём плееру."""
         self.multiplexer.load_video(path)
         self._sync_export_name_field()
+
+        if self.crop_mode is not None:
+            QTimer.singleShot(50, self.crop_mode.show_button_if_needed)
 
     def _on_video_unloaded(self):
         """EditorState сообщил, что список пуст → плеер в placeholder."""
@@ -8603,14 +9692,20 @@ class EditorWindow(QMainWindow):
         self.state.update_active_duration(seconds)
         self.timeline.set_duration(seconds)
 
+
     def _on_videos_changed(self):
         """EditorState сообщил, что состав списка изменился."""
-        self.drop_video.set_files(
+        self.drop_area.set_video_files(
             self.state.get_video_files(),
             self.state.get_active_index(),
         )
-        self.btn_export.setEnabled(self.state.has_videos())
-        self._update_clear_button()
+        self.bottom_panel.set_export_enabled(self.state.has_videos())
+        self.bottom_panel.set_clear_enabled(
+            self.state.has_videos() or self.state.has_audio()
+        )
+
+        if self.crop_mode is not None:
+            self.crop_mode.show_button_if_needed()
 
     def _sync_export_name_field(self):
         """Обновляет поле имени и расширение по активному файлу."""
@@ -8622,58 +9717,16 @@ class EditorWindow(QMainWindow):
             stem = Path(path).stem
             ext = Path(path).suffix.upper()
 
-            self.export_name_frame.setStyleSheet("""
-                QFrame {
-                    background-color: #2a2a2a;
-                    border: 1px solid #555;
-                    border-radius: 4px;
-                }
-            """)
-            self.export_name_input.setEnabled(True)
-            self.export_name_input.blockSignals(True)
-            self.export_name_input.setText(stem)
-            self.export_name_input.blockSignals(False)
+            self.bottom_panel.set_export_filename(stem, ext)
             self.state.set_export_filename(stem)
-
-            self.export_ext_label.setText(ext)
-            self.export_ext_label.setStyleSheet(
-                "color: #666; font-size: 11px; "
-                "background: transparent; border: none;"
-            )
         else:
-            self.export_name_frame.setStyleSheet("""
-                QFrame {
-                    background-color: #1e1e1e;
-                    border: 1px solid #444;
-                    border-radius: 4px;
-                }
-            """)
-            self.export_name_input.setEnabled(False)
-            self.export_name_input.blockSignals(True)
-            self.export_name_input.setText("")
-            self.export_name_input.blockSignals(False)
+            self.bottom_panel.set_export_filename("", "")
             self.state.set_export_filename("")
-
-            self.export_ext_label.setText("")
 
     def _sync_export_path_field(self):
         """Обновить отображение пути экспорта."""
         path = self.state.get_export_path()
-        self.export_path_value.setText(path)
-
-        self.export_path_value.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: none;
-                color: #5fbfbf;
-                font-size: 13px;
-                text-align: right;
-                padding: 6px 10px;
-            }
-            QPushButton:hover {
-                color: #7fd8d8;
-            }
-        """)
+        self.bottom_panel.set_export_path(path)
 
     def _on_export_path_clicked(self):
         """Открыть диалог выбора папки экспорта."""
@@ -8695,7 +9748,7 @@ class EditorWindow(QMainWindow):
 
     def _on_active_video_changed(self, path: str):
         """EditorState сообщил, что активный файл сменился."""
-        self.drop_video.set_active(self.state.get_active_index())
+        self.drop_area.set_video_active(self.state.get_active_index())
         self._sync_export_name_field()
 
     def load_file(self, path: str):
@@ -8703,6 +9756,7 @@ class EditorWindow(QMainWindow):
         logger.info(f"Редактор загружает файл: {path}")
         self.state.add_video_file(path, duration=0.0)
 
+    
     def _on_marker_dragged(self, seconds: float, x_local: int):
         """Перетаскивание маркера — показать превью кадра."""
         pixmap = self.multiplexer.get_last_frame()
@@ -8720,81 +9774,27 @@ class EditorWindow(QMainWindow):
         self._frame_preview.hide_preview()
         self.multiplexer.set_keep_frames(False)
 
-    def _on_tools_clicked(self):
-        self.tools_panel.show_tools()
-        self.btn_tools.setChecked(True)
-        self.btn_settings.setChecked(False)
 
-    def _on_settings_clicked(self):
-        self.tools_panel.show_settings()
-        self.btn_settings.setChecked(True)
-        self.btn_tools.setChecked(False)
+    def _sync_aspect_preset(self):
+        """Передать текущий пресет в плеер."""
+        preset = self.state.get_aspect_preset()
+        self.multiplexer.set_aspect_preset(preset)
 
-    def _on_record_toggled(self, checked: bool):
-        if checked:
-            self._open_record_menu()
-        else:
-            self._close_record_menu()
-
-
-    def _open_record_menu(self):
-        """Показать затемнение и меню."""
-        editor_top_left = self.mapToGlobal(QPoint(0, 0))
-        top_bar_h = self.top_bar.height()
-
-        self._dim_window.setGeometry(
-            editor_top_left.x(),
-            editor_top_left.y() + top_bar_h,
-            self.width(),
-            self.height() - top_bar_h,
-        )
-        self._dim_window.show()
-
-        self._menu_window.adjustSize()
-        menu_w = self._menu_window.sizeHint().width()
-        menu_h = self._menu_window.sizeHint().height()
-
-        btn_global = self.btn_record.mapToGlobal(QPoint(0, 0))
-        menu_x = btn_global.x() - menu_w - 4
-        menu_y = btn_global.y() + (self.btn_record.height() - menu_h) // 2
-
-        self._menu_window.move(menu_x, menu_y)
-        self._menu_window.show()
-
-        self.btn_settings.setEnabled(False)
-
-    def _close_record_menu(self):
-        """Скрыть затемнение и меню."""
-        self._dim_window.hide()
-        self._menu_window.hide()
-        self.btn_settings.setEnabled(True)
-
-        self.btn_record.blockSignals(True)
-        self.btn_record.setChecked(False)
-        self.btn_record.blockSignals(False)
-
-    def _on_record_video(self):
-        self._close_record_menu()
-        self.record_video_requested.emit()
-
-    def _on_record_screen(self):
-        self._close_record_menu()
-        self.record_screen_requested.emit()
-
-    def _on_record_audio(self):
-        self._close_record_menu()
-        self.record_audio_requested.emit()
+    def _sync_aspect_mode(self):
+        """Передать текущий режим (crop/pad) в TopBar."""
+        mode = self.state.get_aspect_mode()
+        self.top_bar.set_aspect_mode(mode)
 
     def _pick_policy(self) -> ClosePolicy:
         """Выбрать политику закрытия по текущему состоянию."""
-        if self.export_service.is_running():
+        if self.export_controller.is_running():
             return ClosePolicy.CONFIRM_IF_EXPORTING
         return ClosePolicy.ALLOW
 
     def _make_context(self) -> CloseContext:
         """Собрать факты о состоянии для close_policy."""
         return CloseContext(
-            is_exporting=self.export_service.is_running(),
+            is_exporting=self.export_controller.is_running(),
         )
 
     def _ask(self, rule: CloseRule) -> bool:
@@ -8810,13 +9810,19 @@ class EditorWindow(QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if self._menu_window.isVisible():
-            self._close_record_menu()
+        if self.record_menu is not None and self.record_menu.is_open():
+            self.record_menu.close()
+        if self.crop_mode is not None:
+            self.crop_mode.reposition()
+            self.crop_mode.show_button_if_needed()
+
 
     def moveEvent(self, event):
         super().moveEvent(event)
-        if self._menu_window.isVisible():
-            self._close_record_menu()
+        if self.record_menu is not None and self.record_menu.is_open():
+            self.record_menu.close()
+        if self.crop_mode is not None:
+            self.crop_mode.reposition()
 
         
     def closeEvent(self, event: QCloseEvent):
@@ -8833,7 +9839,7 @@ class EditorWindow(QMainWindow):
 
         if action == CloseAction.CANCEL_EXPORT_AND_CLOSE:
             logger.info("Отменяем экспорт и закрываем редактор")
-            self.export_service.cancel()
+            self.export_controller.cancel()
 
         self._cleanup_aux_windows()
         self._cleanup_media()
@@ -8844,12 +9850,10 @@ class EditorWindow(QMainWindow):
 
     def _cleanup_aux_windows(self):
         """Скрыть и освободить вспомогательные top-level окна."""
-        for w in (self._dim_window, self._menu_window):
-            try:
-                w.hide()
-                w.deleteLater()
-            except Exception:
-                pass
+        if self.record_menu is not None:
+            self.record_menu.hide_windows()
+        if self.crop_mode is not None:
+            self.crop_mode.hide_windows()
 
     def _cleanup_media(self):
         """Остановить плеер, скрыть попапы и превью."""
@@ -8871,6 +9875,7 @@ class EditorWindow(QMainWindow):
         except Exception:
             pass
 
+
 ======================================================================
 # src/pik2video/gui/widgets/__init__.py
 ======================================================================
@@ -8889,15 +9894,16 @@ class EditorWindow(QMainWindow):
 - screen_settings.py — CleanSpinBox, CapturePerMinuteInput
 """
 
+
 ======================================================================
 # src/pik2video/gui/widgets/common_settings.py
 ======================================================================
 
 # src/pik2video/gui/widgets/common_settings.py
 
-from PySide6.QtWidgets import QWidget, QLabel, QPushButton, QHBoxLayout, QSpinBox, QSizePolicy, QLineEdit, QApplication
-from PySide6.QtCore import Qt, QEvent, Signal, QTimer
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QIntValidator
+from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSizePolicy, QSpinBox, QWidget
 
 
 class CleanSpinBox(QSpinBox):
@@ -9217,17 +10223,19 @@ class ExportFilenameInput(QWidget):
     def set(self, value: str):
         self.lineedit.setText(value)
 
+
 ======================================================================
 # src/pik2video/gui/widgets/finalize_common_settings.py
 ======================================================================
 
 # src/pik2video/gui/widgets/finalize_common_settings.py
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QLineEdit, QLabel, QPushButton, QMenu, QFileDialog
+from pathlib import Path
+from typing import ClassVar
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
-from pathlib import Path
-
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMenu, QPushButton, QWidget
 
 
 class VideoFormatInput(QWidget):
@@ -9396,7 +10404,7 @@ class ResolutionSelector(QWidget):
     
     valueChanged = Signal(str)
     
-    RESOLUTIONS = {
+    RESOLUTIONS: ClassVar[dict] = {
         "original": "Оригинал",
         "1080p": "1080p",
         "720p": "720p",
@@ -9491,7 +10499,7 @@ class RotationSelector(QWidget):
     
     valueChanged = Signal(int)
     
-    ANGLES = {0: "0°", 90: "90°", 180: "180°", 270: "270°"}
+    ANGLES: ClassVar[dict] = {0: "0°", 90: "90°", 180: "180°", 270: "270°"}
     
     def __init__(self, initial: int = 0):
         super().__init__()
@@ -9521,14 +10529,17 @@ class RotationSelector(QWidget):
             self.btn.setText(self.ANGLES[angle])
             self.valueChanged.emit(angle)
 
+
 ======================================================================
 # src/pik2video/gui/widgets/finalize_screen_settings.py
 ======================================================================
 
 # src/pik2video/gui/widgets/finalize_screen_settings.py
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QSpinBox, QPushButton, QLabel
+from typing import ClassVar
+
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSpinBox, QWidget
 
 from .screen_settings import CleanSpinBox
 
@@ -9578,7 +10589,7 @@ class SpeedPresetSelector(QWidget):
 
     valueChanged = Signal(float)  # множитель
 
-    PRESETS = [0.25, 0.5, 1.0, 2.0, 4.0]
+    PRESETS: ClassVar[list] = [0.25, 0.5, 1.0, 2.0, 4.0]
 
     def __init__(self):
         super().__init__()
@@ -9631,22 +10642,23 @@ class SpeedPresetSelector(QWidget):
     def get_multiplier(self) -> float:
         return self.PRESETS[self._current_index]
 
+
 ======================================================================
 # src/pik2video/gui/widgets/global_settings.py
 ======================================================================
 
 # src/pik2video/gui/widgets/global_settings.py
 
-from PySide6.QtWidgets import QComboBox, QSpinBox, QCheckBox, QPushButton, QMenu
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QCheckBox, QMenu, QPushButton
 
+from src.pik2video.locale.languages import (
+    AVAILABLE_LANGUAGES,
+    code_from_display_name,
+    flag_from_code,
+)
 
-
-LANGUAGE_FLAGS = {
-    "Русский": "🇷🇺",
-    "English": "🇺🇸",
-}
 
 TEXT_SIZE_LABELS = {
     1: "Мелкий",
@@ -9700,17 +10712,18 @@ class LanguageSetting(QPushButton):
             QMenu::item:selected { background-color: #3a3a3a; }
         """)
 
-        for lang_name, flag in LANGUAGE_FLAGS.items():
-            action = QAction(f"{flag}  {lang_name}", self)
-            action.triggered.connect(lambda checked=False, n=lang_name: self._select(n))
+        for code, name in AVAILABLE_LANGUAGES.items():
+            flag = flag_from_code(code)
+            action = QAction(f"{flag}  {name}", self)
+            action.triggered.connect(lambda checked=False, n=name: self._select(n))
             self._menu.addAction(action)
 
         self.setMenu(self._menu)
         self._update_text()
 
     def _update_text(self):
-        flag = LANGUAGE_FLAGS.get(self._current, "🏳️")
-        self.setText(flag)
+        code = code_from_display_name(self._current)
+        self.setText(flag_from_code(code))
 
     def _select(self, lang_name: str):
         if lang_name == self._current:
@@ -9721,7 +10734,6 @@ class LanguageSetting(QPushButton):
 
     def get_value(self) -> str:
         return self._current
-
 
 class TextSizeSetting(QPushButton):
     """
@@ -9803,6 +10815,7 @@ class AutoHideEditorSetting(QCheckBox):
     def get_value(self):
         return self.isChecked()
 
+
 ======================================================================
 # src/pik2video/gui/widgets/record_settings.py
 ======================================================================
@@ -9810,8 +10823,8 @@ class AutoHideEditorSetting(QCheckBox):
 # src/pik2video/gui/widgets/record_settings.py
 
 
-from PySide6.QtWidgets import QWidget, QLabel, QPushButton, QHBoxLayout
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QWidget
 
 
 # ────────FPS Switcher────────
@@ -9874,8 +10887,8 @@ class FpsSwitcher(QWidget):
 ======================================================================
 
 # src/pik2video/gui/widgets/screen_settings.py
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QSpinBox
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QHBoxLayout, QSpinBox, QWidget
 
 
 class CleanSpinBox(QSpinBox):
@@ -9920,13 +10933,15 @@ class CapturePerMinuteInput(QWidget):
         """Устанавливает значение."""
         self.spinbox.setValue(value)
 
+
 ======================================================================
 # src/pik2video/gui/widgets/setting_row.py
 ======================================================================
 
 # src/pik2video/gui/widgets/setting_row.py
 
-from PySide6.QtWidgets import QWidget, QLabel, QHBoxLayout, QSpacerItem, QSizePolicy
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QSpacerItem, QWidget
+
 
 class SettingRow(QWidget):
     """
@@ -9968,7 +10983,8 @@ class SettingRow(QWidget):
         if hasattr(self, 'label'):
             self.label.setText(text)
         else:
-            print(f"[ERROR] SettingRow: label не существует!")
+            print("[ERROR] SettingRow: label не существует!")
+
 
 ======================================================================
 # src/pik2video/gui/windows/__init__.py
@@ -9984,16 +11000,14 @@ class SettingRow(QWidget):
 - progress.py — ProgressDialog + InstallationWorker
 """
 
+
 ======================================================================
 # src/pik2video/gui/windows/ffmpeg_missing.py
 ======================================================================
 
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QApplication
-)
-from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QDesktopServices, QFont
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from .progress import ProgressDialog
 
@@ -10199,18 +11213,16 @@ class FFmpegMissingDialog(QDialog):
         self._apply_translations()
         super().showEvent(event)
 
+
 ======================================================================
 # src/pik2video/gui/windows/progress.py
 ======================================================================
 
 # src/pik2video/gui/progress_dialog.py
 
-from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout,
-    QLabel, QProgressBar, QPushButton, QApplication
-)
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QProgressBar, QPushButton, QVBoxLayout
 
 from src.pik2video.infrastructure.ffmpeg.installer import FFmpegInstaller
 
@@ -10409,8 +11421,8 @@ class ProgressDialog(QDialog):
 
     def _restart_app(self):
         """Перезапускает приложение"""
-        import sys
         import subprocess
+        import sys
         self.accept()
         if self.worker.isRunning():
             self.worker.quit()
@@ -10449,6 +11461,7 @@ class ProgressDialog(QDialog):
             self.worker.wait()
         event.accept()
 
+
 ======================================================================
 # src/pik2video/gui/windows/recording.py
 ======================================================================
@@ -10470,13 +11483,9 @@ class ProgressDialog(QDialog):
 
 import logging
 
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QMainWindow, QMessageBox
-)
-from PySide6.QtCore import Qt, Signal, QEvent
+from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
 
-from ..common.utils import keep_window_inside_screen, bottom_right_position
-from ..common.dialogs import confirm
 from ..common.close_policy import (
     CloseAction,
     CloseContext,
@@ -10484,6 +11493,8 @@ from ..common.close_policy import (
     CloseRule,
     evaluate_close,
 )
+from ..common.dialogs import confirm
+from ..common.utils import bottom_right_position, keep_window_inside_screen
 
 logger = logging.getLogger(__name__)
 
@@ -10497,6 +11508,7 @@ class RecordingWindow(QMainWindow):
         super().__init__()
 
         self.controller = controller
+        #self.translator = controller.get_translator()
         self._editor_visible = False
 
         self.setWindowFlag(Qt.Window)
@@ -10625,10 +11637,14 @@ class RecordingWindow(QMainWindow):
 
     def _pick_policy(self) -> ClosePolicy:
         """Выбрать политику закрытия по текущему состоянию."""
-        if self.controller.is_recording():
-            return ClosePolicy.CONFIRM_IF_RECORDING
-        if self.controller.is_preparing():
+        from src.pik2video.application.state_machine import AppState
+
+        state = self.controller.state_manager.get_state()
+
+        if state in (AppState.PREPARING_VIDEO, AppState.PREPARING_SCREEN, AppState.WAITING):
             return ClosePolicy.CANCEL_PREPARING
+        if state == AppState.RECORDING:
+            return ClosePolicy.CONFIRM_IF_RECORDING
         if self.controller.has_active_session_data():
             return ClosePolicy.CONFIRM_IF_DATA
         if self._editor_visible:
@@ -10692,6 +11708,7 @@ class RecordingWindow(QMainWindow):
         else:  # CANCEL
             event.ignore()
 
+
 ======================================================================
 # src/pik2video/infrastructure/ffmpeg/__init__.py
 ======================================================================
@@ -10705,6 +11722,7 @@ class RecordingWindow(QMainWindow):
 - installer.py — установка FFmpeg
 """
 
+
 ======================================================================
 # src/pik2video/infrastructure/ffmpeg/ffmpeg_service.py
 ======================================================================
@@ -10712,14 +11730,13 @@ class RecordingWindow(QMainWindow):
 #src/pik2video/infrastructure/ffmpeg/ffmpeg_service.py
 
 import logging
-
+import os
+import platform
 import shutil
 import subprocess
-import platform
-import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import ClassVar, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -10733,7 +11750,7 @@ class FFmpegService:
     - Формирование команд FFmpeg с оптимальными параметрами
     """
 
-    QUALITY_PRESETS = {
+    QUALITY_PRESETS: ClassVar[dict] = {
         "Низкое": {"preset": "ultrafast", "crf": "28", "bitrate": "1M"},
         "Среднее": {"preset": "medium", "crf": "23", "bitrate": "4M"},
         "Высокое": {"preset": "slow", "crf": "18", "bitrate": "8M"},
@@ -10786,6 +11803,7 @@ class FFmpegService:
                 ["ffmpeg", "-version"],
                 capture_output=True,
                 text=True,
+                check=False,
                 timeout=5
             )
             return result.stdout.split("\n")[0] if result.stdout else None
@@ -10923,6 +11941,7 @@ class FFmpegService:
                 ["ffmpeg", "-encoders"],
                 capture_output=True,
                 text=True,
+                check=False,
                 timeout=5
             )
             return encoder in result.stdout
@@ -10955,6 +11974,7 @@ class FFmpegService:
         else:
             return 'ffmpeg'
 
+
 ======================================================================
 # src/pik2video/infrastructure/ffmpeg/installer.py
 ======================================================================
@@ -10964,12 +11984,11 @@ class FFmpegService:
 import os
 import shutil
 import subprocess
-import sys
+import tarfile
 import tempfile
 import zipfile
-import tarfile
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import ClassVar, Optional, Tuple
 
 from PySide6.QtCore import QObject, Signal
 
@@ -10986,7 +12005,7 @@ class FFmpegInstaller(QObject):
     status_updated = Signal(str)     # текст статуса
     finished = Signal(bool, str)     # (успех, сообщение)
 
-    URLS = {
+    URLS: ClassVar[dict] = {
         'macos': {
             'arm64': ('https://evermeet.cx/ffmpeg/get/zip', '.zip'),
             'x86_64': ('https://evermeet.cx/ffmpeg/get/zip', '.zip'),
@@ -11057,17 +12076,17 @@ class FFmpegInstaller(QObject):
             self.finished.emit(True, "Установка завершена")
 
         except Exception as e:
-            self.finished.emit(False, f"Ошибка установки: {str(e)}")
+            self.finished.emit(False, f"Ошибка установки: {e!s}")
         finally:
             if 'archive_path' in locals() and archive_path and archive_path.exists():
                 try:
                     archive_path.unlink()
-                except:
+                except Exception:
                     pass
             if 'extract_dir' in locals() and extract_dir and extract_dir.exists():
                 try:
                     shutil.rmtree(extract_dir)
-                except:
+                except Exception:
                     pass
 
     def cancel(self):
@@ -11132,8 +12151,8 @@ class FFmpegInstaller(QObject):
         Скачивает архив FFmpeg во временный файл.
         Возвращает путь к скачанному файлу.
         """
-        import urllib.request
         import ssl
+        import urllib.request
 
         url, suffix = self._get_download_url()
         if not url:
@@ -11160,7 +12179,7 @@ class FFmpegInstaller(QObject):
             urllib.request.urlretrieve(url, str(temp_path), reporthook=report_progress)
             return temp_path
         except Exception as e:
-            raise RuntimeError(f"Ошибка загрузки: {e}")
+            raise RuntimeError(f"Ошибка загрузки: {e}") from e
 
     def _extract_archive(self, archive_path: Path) -> Path:
         """Распаковывает архив (ZIP или TAR.XZ) во временную папку."""
@@ -11184,7 +12203,7 @@ class FFmpegInstaller(QObject):
         Возвращает путь к нему или None.
         """
         executable_name = self._get_executable_name()
-        for root, dirs, files in os.walk(extract_dir):
+        for root, _dirs, files in os.walk(extract_dir):
             if executable_name in files:
                 return Path(root) / executable_name
         return None
@@ -11195,11 +12214,13 @@ class FFmpegInstaller(QObject):
             result = subprocess.run(
                 [str(ffmpeg_path), '-version'],
                 capture_output=True,
+                check=False,
                 timeout=5
             )
             return result.returncode == 0
-        except:
+        except Exception:
             return False
+
 
 ======================================================================
 # src/pik2video/infrastructure/logging/__init__.py
@@ -11213,6 +12234,7 @@ from .logger_setup import setup_logging
 
 __all__ = ["setup_logging"]
 
+
 ======================================================================
 # src/pik2video/infrastructure/logging/logger_setup.py
 ======================================================================
@@ -11221,8 +12243,9 @@ __all__ = ["setup_logging"]
 
 import logging
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
 
 def setup_logging(debug_mode: bool = False, log_to_file: bool = True):
     """
@@ -11272,6 +12295,7 @@ def setup_logging(debug_mode: bool = False, log_to_file: bool = True):
         logger.info(f"Файл логов: {log_file}")
     logger.info("=" * 60)
 
+
 ======================================================================
 # src/pik2video/infrastructure/system/__init__.py
 ======================================================================
@@ -11284,6 +12308,7 @@ def setup_logging(debug_mode: bool = False, log_to_file: bool = True):
 - platform_detector.py — определение ОС и архитектуры
 """
 
+
 ======================================================================
 # src/pik2video/infrastructure/system/platform_detector.py
 ======================================================================
@@ -11295,7 +12320,7 @@ def setup_logging(debug_mode: bool = False, log_to_file: bool = True):
 
 import platform
 import sys
-from typing import Dict, Optional
+from typing import ClassVar, Dict
 
 
 class PlatformDetector:
@@ -11303,13 +12328,13 @@ class PlatformDetector:
     Класс для определения платформы и архитектуры.
     """
 
-    OS_MAP = {
+    OS_MAP: ClassVar[Dict[str, str]] = {
         "Darwin": "macos",
         "Windows": "windows",
         "Linux": "linux",
     }
 
-    ARCH_MAP = {
+    ARCH_MAP: ClassVar[Dict[str, str]] = {
         "x86_64": "x86_64",
         "AMD64": "x86_64",
         "arm64": "arm64",
@@ -11432,6 +12457,7 @@ def get_full_info() -> Dict[str, str]:
     """Обёртка для быстрого вызова."""
     return PlatformDetector.get_full_info()
 
+
 ======================================================================
 # src/pik2video/locale/__init__.py
 ======================================================================
@@ -11446,24 +12472,59 @@ def get_full_info() -> Dict[str, str]:
 - ru.json, en.json — файлы переводов
 """
 
+
 ======================================================================
 # src/pik2video/locale/languages.py
 ======================================================================
 
 # src/pik2video/locale/languages.py
+"""
+Центральный реестр языков приложения.
+
+Единственное место, где хранится соответствие:
+- внутренний код языка ("ru", "en")
+- отображаемое название ("Русский", "English")
+- флаг для UI ("🇷🇺", "🇺🇸")
+
+Раньше это знание дублировалось в SettingsManager,
+AppSettingsDialog и LanguageSetting. Теперь — здесь.
+"""
 
 LANGUAGE_RU = "ru"
 LANGUAGE_EN = "en"
 
-AVAILABLE_LANGUAGES = {
+DEFAULT_LANGUAGE = LANGUAGE_RU
+
+
+AVAILABLE_LANGUAGES: dict[str, str] = {
     LANGUAGE_RU: "Русский",
-    LANGUAGE_EN: "English"
+    LANGUAGE_EN: "English",
 }
 
-LANGUAGE_CODE_MAP = {
-    "Русский": LANGUAGE_RU,
-    "English": LANGUAGE_EN
+LANGUAGE_CODE_MAP: dict[str, str] = {
+    name: code for code, name in AVAILABLE_LANGUAGES.items()
 }
+
+LANGUAGE_FLAGS: dict[str, str] = {
+    LANGUAGE_RU: "🇷🇺",
+    LANGUAGE_EN: "🇺🇸",
+}
+
+
+def code_from_display_name(name: str) -> str:
+    """'Русский' → 'ru'. Если неизвестно — DEFAULT_LANGUAGE."""
+    return LANGUAGE_CODE_MAP.get(name, DEFAULT_LANGUAGE)
+
+
+def display_name_from_code(code: str) -> str:
+    """'ru' → 'Русский'. Если неизвестно — название по умолчанию."""
+    return AVAILABLE_LANGUAGES.get(code, AVAILABLE_LANGUAGES[DEFAULT_LANGUAGE])
+
+
+def flag_from_code(code: str) -> str:
+    """'ru' → '🇷🇺'. Если неизвестно — белый флаг."""
+    return LANGUAGE_FLAGS.get(code, "🏳️")
+
 
 ======================================================================
 # src/pik2video/locale/translator.py
@@ -11471,10 +12532,11 @@ LANGUAGE_CODE_MAP = {
 
 # src/pik2video/locale/translator.py
 
-import logging
-from PySide6.QtCore import QObject, Signal
 import json
+import logging
 from pathlib import Path
+
+from PySide6.QtCore import QObject, Signal
 
 logger = logging.getLogger(__name__)
 
@@ -11530,6 +12592,7 @@ class Translator(QObject):
     def get_current_language(self):
         return self._current_language
 
+
 ======================================================================
 # src/pik2video/storage/__init__.py
 ======================================================================
@@ -11542,6 +12605,7 @@ class Translator(QObject):
 - session_storage.py — временная папка сессии записи
 """
 
+
 ======================================================================
 # src/pik2video/storage/session_storage.py
 ======================================================================
@@ -11549,9 +12613,8 @@ class Translator(QObject):
 # src/pik2video/storage/session_storage.py
 
 import logging
-
-import time
 import shutil
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -11698,6 +12761,7 @@ class SessionStorage:
         
         self.session_dir = None
 
+
 ======================================================================
 # src/pik2video/utils.py
 ======================================================================
@@ -11734,3 +12798,4 @@ def format_time(seconds: float, prefix: str = "TIME:") -> str:
     minutes = (seconds % 3600) // 60
     secs = seconds % 60
     return f"{prefix} {hours:02}:{minutes:02}:{secs:02}"
+

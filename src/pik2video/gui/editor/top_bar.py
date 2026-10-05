@@ -16,7 +16,9 @@
 import logging
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QPushButton, QWidget
+from PySide6.QtWidgets import (
+    QButtonGroup, QHBoxLayout, QLabel, QPushButton, QWidget
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,7 @@ class TopBar(QWidget):
     tools_clicked = Signal()
     settings_clicked = Signal()
     preset_changed = Signal(str)
+    aspect_mode_changed = Signal(str)
     record_toggled = Signal(bool)
 
     def __init__(self, tools_block_width: int = TOOLS_BLOCK_WIDTH, parent=None):
@@ -175,6 +178,59 @@ class TopBar(QWidget):
             layout.addWidget(btn)
 
         self.preset_buttons["original"].setChecked(True)
+
+        # ── Разделитель ──
+        layout.addSpacing(16)
+        divider = QLabel("|")
+        divider.setStyleSheet(
+            "color: #555; font-size: 14px; "
+            "background: transparent; border: none;"
+        )
+        layout.addWidget(divider)
+        layout.addSpacing(16)
+
+        # ── Режим: crop / pad ──
+        mode_style = """
+            QPushButton {
+                background-color: #3a3a3a;
+                border: 1px solid #555;
+                border-radius: 4px;
+                color: #e0e0e0;
+                padding: 2px 8px;
+                font-size: 13px;
+            }
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:pressed { background-color: #2a2a2a; }
+            QPushButton:checked {
+                background-color: #5a5a5a;
+                border-color: #d4a843;
+            }
+        """
+
+        self._mode_group = QButtonGroup(panel)
+        self._mode_group.setExclusive(True)
+
+        self.btn_crop = QPushButton("✂️")
+        self.btn_crop.setFixedSize(30, 24)
+        self.btn_crop.setCheckable(True)
+        self.btn_crop.setChecked(True)
+        self.btn_crop.setStyleSheet(mode_style)
+        self.btn_crop.setFocusPolicy(Qt.NoFocus)
+        self.btn_crop.setToolTip("Обрезать по краям")
+        self.btn_crop.clicked.connect(lambda: self._on_mode_clicked("crop"))
+        self._mode_group.addButton(self.btn_crop)
+        layout.addWidget(self.btn_crop)
+
+        self.btn_pad = QPushButton("⬛")
+        self.btn_pad.setFixedSize(30, 24)
+        self.btn_pad.setCheckable(True)
+        self.btn_pad.setStyleSheet(mode_style)
+        self.btn_pad.setFocusPolicy(Qt.NoFocus)
+        self.btn_pad.setToolTip("Дополнить фоном")
+        self.btn_pad.clicked.connect(lambda: self._on_mode_clicked("pad"))
+        self._mode_group.addButton(self.btn_pad)
+        layout.addWidget(self.btn_pad)
+
         return panel
 
     def _build_record_button(self) -> QPushButton:
@@ -215,7 +271,18 @@ class TopBar(QWidget):
         logger.debug(f"Пресет выбран: {key}")
         self.preset_changed.emit(key)
 
+    def _on_mode_clicked(self, mode: str):
+        logger.debug(f"Режим кадра: {mode}")
+        self.aspect_mode_changed.emit(mode)
+
     # ── Управление панелью пресетов ──
 
     def show_presets(self, visible: bool):
         self.presets_panel.setVisible(visible)
+
+    def set_aspect_mode(self, mode: str):
+        """Синхронизировать активную кнопку режима с состоянием."""
+        if mode == "crop":
+            self.btn_crop.setChecked(True)
+        elif mode == "pad":
+            self.btn_pad.setChecked(True)

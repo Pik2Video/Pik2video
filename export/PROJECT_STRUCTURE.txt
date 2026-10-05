@@ -49,15 +49,21 @@ src/
                 __pycache__/
             editor/
                 __init__.py
+                bottom_panel.py
+                crop_mode.py
+                drop_area.py
                 drop_zone.py
+                export_controller.py
                 export_dialog.py
                 export_service.py
                 frame_preview.py
                 global_settings_panel.py
                 player.py
+                record_menu.py
                 state.py
                 timeline.py
                 tools_panel.py
+                top_bar.py
                 video_files_panel.py
                 volume.py
                 window.py
@@ -115,3 +121,5 @@ src/
     data/
         drafts/
         tmp/
+            session_20261002_233135/
+            session_20261002_232819/

@@ -244,8 +244,10 @@ class EditorWindow(QMainWindow):
         self.top_bar.tools_clicked.connect(self.tools_panel.show_tools)
         self.top_bar.settings_clicked.connect(self.tools_panel.show_settings)
         self.top_bar.preset_changed.connect(self.state.set_aspect_preset)
+        self.top_bar.aspect_mode_changed.connect(self.state.set_aspect_mode)
 
         self.state.settings_changed.connect(self._sync_aspect_preset)
+        self.state.settings_changed.connect(self._sync_aspect_mode)
 
 
         
@@ -444,6 +446,10 @@ class EditorWindow(QMainWindow):
         preset = self.state.get_aspect_preset()
         self.multiplexer.set_aspect_preset(preset)
 
+    def _sync_aspect_mode(self):
+        """Передать текущий режим (crop/pad) в TopBar."""
+        mode = self.state.get_aspect_mode()
+        self.top_bar.set_aspect_mode(mode)
 
     def _pick_policy(self) -> ClosePolicy:
         """Выбрать политику закрытия по текущему состоянию."""
