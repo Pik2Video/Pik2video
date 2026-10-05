@@ -473,6 +473,15 @@ class EditorWindow(QMainWindow):
             no_label=rule.no_label,
         )
 
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        if self.crop_mode is not None:
+            self.crop_mode.hide_button()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self.crop_mode is not None:
+            self.crop_mode.show_button()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

@@ -213,7 +213,8 @@ class TopBar(QWidget):
         self.btn_crop = QPushButton("✂️")
         self.btn_crop.setFixedSize(30, 24)
         self.btn_crop.setCheckable(True)
-        self.btn_crop.setChecked(True)
+        #self.btn_crop.setChecked(True)
+
         self.btn_crop.setStyleSheet(mode_style)
         self.btn_crop.setFocusPolicy(Qt.NoFocus)
         self.btn_crop.setToolTip("Обрезать по краям")
@@ -224,6 +225,7 @@ class TopBar(QWidget):
         self.btn_pad = QPushButton("⬛")
         self.btn_pad.setFixedSize(30, 24)
         self.btn_pad.setCheckable(True)
+        self.btn_pad.setChecked(True)
         self.btn_pad.setStyleSheet(mode_style)
         self.btn_pad.setFocusPolicy(Qt.NoFocus)
         self.btn_pad.setToolTip("Дополнить фоном")

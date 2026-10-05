@@ -174,6 +174,29 @@ class CropModeController(QObject):
             except Exception:
                 pass
 
+    def hide_button(self):
+        """Скрыть кнопку кадра (например, при сворачивании редактора)."""
+        self._button.hide()
+        if self._active:
+            self._overlay.hide()
+
+    def show_button(self):
+        """Показать кнопку кадра обратно."""
+        if self._editor.state.has_videos():
+            self._position_button()
+            self._button.show()
+            if self._active:
+                # При возврате редактора восстанавливаем overlay
+                editor_global = self._editor.mapToGlobal(QPoint(0, 0))
+                top_bar_h = self._editor.top_bar.height()
+                self._overlay.setGeometry(
+                    editor_global.x(),
+                    editor_global.y() + top_bar_h,
+                    self._editor.width(),
+                    self._editor.height() - top_bar_h,
+                )
+                self._overlay.show()
+
     # ── Внутренние ──
 
     def _position_button(self):

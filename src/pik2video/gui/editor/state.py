@@ -73,7 +73,7 @@ class EditorState(QObject):
         self._speed: float = 1.0
 
         self._aspect_preset: str = "original"   # original / 16:9 / 9:16 / 1:1 / 4:5 / 4:3
-        self._aspect_mode: str = "crop"         # crop / pad
+        self._aspect_mode: str = "pad"         # crop / pad
 
         self._export_filename: str = ""
         self._export_path: str = str(Path.home() / "Desktop" / "output_file")
