@@ -138,7 +138,7 @@ class TimerInput(QWidget):
     Ввод времени в формате hh:mm:ss с автозаполнением и белым цветом текста.
     """
 
-    def __init__(self):
+    def __init__(self, align=Qt.AlignCenter):
         super().__init__()
 
         self._has_focus_inside = False
@@ -149,7 +149,8 @@ class TimerInput(QWidget):
         # ───── UI ─────
         outer = QHBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
-        outer.addStretch()
+        if align != Qt.AlignLeft:
+            outer.addStretch()
 
         self.block = QWidget()
         self.block.setFixedHeight(36)
@@ -186,7 +187,8 @@ class TimerInput(QWidget):
         layout.addWidget(self.seconds)
 
         outer.addWidget(self.block)
-        outer.addStretch()
+        if align != Qt.AlignRight:
+            outer.addStretch()
 
         self.setFocusPolicy(Qt.StrongFocus)
 
@@ -312,7 +314,7 @@ class QualitySwitcher(QWidget):
 class ExportFilenameInput(QWidget):
     valueChanged = Signal(str)
 
-    def __init__(self, initial: str = "output"):
+    def __init__(self, initial: str = "", placeholder: str = ""):
         super().__init__()
 
         layout = QHBoxLayout(self)
@@ -320,10 +322,22 @@ class ExportFilenameInput(QWidget):
 
         self.lineedit = QLineEdit()
         self.lineedit.setText(initial)
-        self.lineedit.setMinimumWidth(90)
+        self.lineedit.setFixedWidth(165)
+        self.lineedit.setStyleSheet("""
+            QLineEdit {
+                border: none;
+                background-color: #1e1e1e;
+                color: #e0e0e0;
+                padding: 3px 6px;
+                font-size: 12px;
+            }
+        """)
+        if placeholder:
+            self.lineedit.setPlaceholderText(placeholder)
 
         self.lineedit.textChanged.connect(self.valueChanged.emit)
 
+        layout.addStretch()                # прижать lineedit к правому краю контейнера
         layout.addWidget(self.lineedit)
 
     def get(self) -> str:

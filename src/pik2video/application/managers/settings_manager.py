@@ -1,4 +1,4 @@
-# managers/settings_manager.py
+# src/pik2video/application/managers/settings_manager.py
 """
 Менеджер настроек приложения.
 
@@ -114,6 +114,13 @@ class SettingsManager(QObject):
         self.settings.global_settings.auto_hide_editor = value
         logger.debug(f"Auto-hide editor: {value}")
 
+    def get_show_recording_frame(self) -> bool:
+        return self.settings.global_settings.show_recording_frame
+
+    def set_show_recording_frame(self, value: bool):
+        self.settings.global_settings.show_recording_frame = value
+        logger.debug(f"Show recording frame: {value}")
+
     # ---------- Настройки записи видео (Record) ----------
 
     def get_record_fps(self) -> int:
@@ -196,70 +203,7 @@ class SettingsManager(QObject):
         self.settings.finalize.common.export_filename = name
         logger.debug(f"Export filename установлен: {name}")
 
-    def get_export_path(self) -> str:
-        path = self.settings.finalize.common.export_path
-        if not path:
-            path = str(Path.home() / "Desktop")
-        return path
 
-    def set_export_path(self, path: str):
-        self.settings.finalize.common.export_path = path
-        logger.debug(f"Export path установлен: {path}")
-
-    def get_video_format(self) -> str:
-        return self.settings.finalize.common.video_format
-
-    def set_video_format(self, fmt: str):
-        allowed = ["MP4", "MKV", "AVI", "MOV", "GIF"]
-        if fmt not in allowed:
-            fmt = "MP4"
-        self.settings.finalize.common.video_format = fmt
-        logger.debug(f"Video format установлен: {fmt}")
-
-    def get_resolution(self) -> str:
-        return self.settings.finalize.common.resolution
-
-    def set_resolution(self, value: str):
-        allowed = ["original", "1080p", "720p", "480p"]
-        if value in allowed:
-            self.settings.finalize.common.resolution = value
-            logger.debug(f"Resolution установлен: {value}")
-
-    def get_bitrate_mode(self) -> str:
-        return self.settings.finalize.common.bitrate_mode
-
-    def get_bitrate_value(self) -> str:
-        return self.settings.finalize.common.bitrate_value
-
-    def set_bitrate(self, mode: str, value: str):
-        self.settings.finalize.common.bitrate_mode = mode
-        self.settings.finalize.common.bitrate_value = value
-        logger.debug(f"Bitrate установлен: {mode}, {value}")
-
-    def get_rotation(self) -> int:
-        return self.settings.finalize.common.rotation
-
-    def set_rotation(self, angle: int):
-        if angle in (0, 90, 180, 270):
-            self.settings.finalize.common.rotation = angle
-            logger.debug(f"Rotation установлен: {angle}°")
-
-    def get_screen_finalize_fps(self) -> int:
-        return self.settings.finalize.screen.playback_fps
-
-    def set_screen_finalize_fps(self, fps: int):
-        if 1 <= fps <= 100:
-            self.settings.finalize.screen.playback_fps = fps
-            logger.debug(f"Screen finalize FPS установлен: {fps}")
-
-    def get_speed_multiplier(self) -> float:
-        return self.settings.finalize.screen.speed_multiplier
-
-    def set_speed_multiplier(self, multiplier: float):
-        self.settings.finalize.screen.speed_multiplier = multiplier
-        logger.debug(f"Speed multiplier установлен: {multiplier}x")
-
-    
     # ---------- Обёртки для start_delay (чтобы не передавать session_type каждый раз) ----------
 
     def get_record_start_delay(self) -> int:
@@ -275,3 +219,99 @@ class SettingsManager(QObject):
     def set_screen_start_delay(self, seconds: int):
         self.settings.screen.common.start_delay = max(0, seconds)
         logger.debug(f"Screen start_delay установлен: {seconds} сек")
+
+
+    # ───── Настройки звука (общие для видео/скрина) ─────
+
+    def get_audio_enabled(self, session_type: Optional[SessionType] = None) -> bool:
+        if session_type == SessionType.VIDEO:
+            return self.settings.record.common.audio_enabled
+        elif session_type == SessionType.SCREEN:
+            return self.settings.screen.common.audio_enabled
+        return self.settings.record.common.audio_enabled
+
+    def set_audio_enabled(self, value: bool, session_type: Optional[SessionType] = None):
+        if session_type == SessionType.VIDEO:
+            self.settings.record.common.audio_enabled = value
+        elif session_type == SessionType.SCREEN:
+            self.settings.screen.common.audio_enabled = value
+        else:
+            self.settings.record.common.audio_enabled = value
+            self.settings.screen.common.audio_enabled = value
+        logger.debug(f"Audio enabled: {value}")
+
+    def get_audio_sources(self, session_type: Optional[SessionType] = None) -> list:
+        if session_type == SessionType.VIDEO:
+            return list(self.settings.record.common.audio_sources)
+        elif session_type == SessionType.SCREEN:
+            return list(self.settings.screen.common.audio_sources)
+        elif session_type == SessionType.AUDIO:
+            return list(self.settings.audio.sources)
+        return list(self.settings.audio.sources)
+
+    def set_audio_sources(self, sources: list, session_type: Optional[SessionType] = None):
+        sources = list(sources)
+        if session_type == SessionType.VIDEO:
+            self.settings.record.common.audio_sources = sources
+        elif session_type == SessionType.SCREEN:
+            self.settings.screen.common.audio_sources = sources
+        elif session_type == SessionType.AUDIO:
+            self.settings.audio.sources = sources
+        else:
+            self.settings.audio.sources = sources
+        logger.debug(f"Audio sources: {sources}")
+
+    def get_audio_device(self, session_type: Optional[SessionType] = None) -> str:
+        if session_type == SessionType.VIDEO:
+            return self.settings.record.common.audio_device
+        elif session_type == SessionType.SCREEN:
+            return self.settings.screen.common.audio_device
+        return self.settings.audio.device
+
+    def set_audio_device(self, device: str, session_type: Optional[SessionType] = None):
+        if session_type == SessionType.VIDEO:
+            self.settings.record.common.audio_device = device
+        elif session_type == SessionType.SCREEN:
+            self.settings.screen.common.audio_device = device
+        else:
+            self.settings.audio.device = device
+        logger.debug(f"Audio device: {device}")
+
+    # ───── Настройки чистой аудио-сессии ─────
+
+    def get_audio_timer(self) -> int:
+        return self.settings.audio.timer_seconds
+
+    def set_audio_timer(self, seconds: int):
+        self.settings.audio.timer_seconds = max(0, seconds)
+        logger.debug(f"Audio timer установлен: {seconds} сек")
+
+    def get_audio_start_delay(self) -> int:
+        return self.settings.audio.start_delay                    # пауза перед стартом аудио-записи
+
+    def set_audio_start_delay(self, seconds: int):
+        self.settings.audio.start_delay = max(0, seconds)
+        logger.debug(f"Audio start_delay установлен: {seconds} сек")
+
+    def get_audio_export_filename(self) -> str:
+        return self.settings.audio.export_filename                    # имя файла аудио-записи
+
+    def get_audio_sample_rate(self) -> int:
+        return self.settings.audio.sample_rate                        # частота дискретизации
+
+    def set_audio_sample_rate(self, value: int):
+        if value in (44100, 48000):
+            self.settings.audio.sample_rate = value
+            logger.debug(f"Audio sample rate: {value}")
+
+    def get_audio_channels(self) -> int:
+        return self.settings.audio.channels                           # число каналов
+
+    def set_audio_channels(self, value: int):
+        if value in (1, 2):
+            self.settings.audio.channels = value
+            logger.debug(f"Audio channels: {value}")
+
+    def set_audio_export_filename(self, name: str):
+        self.settings.audio.export_filename = name                    # сохранение имени аудио-записи
+        logger.debug(f"Audio export filename установлен: {name}")

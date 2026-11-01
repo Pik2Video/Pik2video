@@ -30,10 +30,14 @@ class AppController(QObject):
     time_updated = Signal(str)
     ram_updated = Signal(str)
     shots_updated = Signal(int)
+    audio_level_updated = Signal(float)   # уровень микрофона 0.0 … 1.0
     open_editor_requested = Signal(str)   # путь к файлу
+    preparation_started = Signal()        # начало подготовки файла
+    preparation_finished = Signal()       # конец подготовки
 
 
     def __init__(self, base_tmp_dir: Optional[Path] = None):
+        
         super().__init__()
 
         # ---------- Менеджеры ----------
@@ -46,7 +50,7 @@ class AppController(QObject):
         self.state_manager = StateManager()
         self.state_manager.state_changed.connect(self.state_changed.emit)
 
-        tmp_dir = base_tmp_dir or Path(__file__).resolve().parents[2] / "data" / "tmp"
+        tmp_dir = base_tmp_dir or Path(__file__).resolve().parents[3] / "data" / "tmp"    # data/tmp в корне проекта
         self.session_manager = SessionManager(tmp_dir)
 
         recording_service = RecordingService(self.settings_manager.settings)
@@ -60,6 +64,9 @@ class AppController(QObject):
         self.recording_manager.time_updated.connect(self.time_updated.emit)
         self.recording_manager.ram_updated.connect(self.ram_updated.emit)
         self.recording_manager.shots_updated.connect(self.shots_updated.emit)
+        self.recording_manager.audio_level_updated.connect(self.audio_level_updated.emit)
+        self.recording_manager.preparation_started.connect(self.preparation_started.emit)
+        self.recording_manager.preparation_finished.connect(self.preparation_finished.emit)
 
     # =========================================================
     #  Публичные методы (фасад для менеджеров)
@@ -99,7 +106,17 @@ class AppController(QObject):
         else:
             logger.warning("StateManager запретил переход")
             self.session_manager.set_session_type(None)
-            self.set_video_format("GIF")
+
+    def prepare_audio(self):
+        logger.info("Запрошен PREPARING_AUDIO")
+
+        self.session_manager.set_session_type(SessionType.AUDIO)       # тип сессии — только звук
+
+        if self.state_manager.prepare_audio():
+            logger.info("Переход в PREPARING_AUDIO выполнен")
+        else:
+            logger.warning("StateManager запретил переход")
+            self.session_manager.set_session_type(None)                # откат типа сессии при неудаче
 
     def cancel_session(self):
         logger.info("Запрошен CANCEL_SESSION")
@@ -119,14 +136,24 @@ class AppController(QObject):
         return self.session_manager.has_data()
 
     def get_current_session_file(self):
-        """Путь к файлу текущей сессии."""
+        """Путь к файлу текущей сессии (видео или аудио в зависимости от типа)."""
+        if self.session_manager.get_session_type() == SessionType.AUDIO:
+            return self.session_manager.get_audio_path()              # для аудио-сессии берём аудиофайл
         return self.session_manager.get_video_path()
 
     def get_drafts_dir(self) -> Path:
         """Папка для временных файлов редактора (черновиков)."""
-        drafts_dir = Path(__file__).resolve().parents[2] / "data" / "drafts"
+        drafts_dir = Path(__file__).resolve().parents[3] / "data" / "drafts"     # data/drafts в корне проекта
         drafts_dir.mkdir(parents=True, exist_ok=True)
         return drafts_dir
+
+    def get_thumbs_dir(self) -> Path:
+        """Папка для кэша миниатюр видеофайлов."""
+        thumbs_dir = Path(__file__).resolve().parents[3] / "data" / "thumbs"     # data/thumbs в корне проекта
+        thumbs_dir.mkdir(parents=True, exist_ok=True)
+        return thumbs_dir
+
+
     # ---------- Проверки состояния (прокси для StateManager) ----------
 
     def is_recording(self) -> bool:
@@ -150,34 +177,11 @@ class AppController(QObject):
     def stop_recording(self) -> bool:
         return self.recording_manager.stop_recording()
 
-    def finalize_session(self) -> bool:
-        logger.info("Запрошен FINALIZE_SESSION")
-        if not self.state_manager.can_finalize_session():
-            logger.warning("Нельзя финализировать в текущем состоянии")
-            return False
-
-        logger.debug("Экспортируем сессию...")
-        export_dir = Path(self.get_export_path())
-        filename = self.get_export_filename()
-
-        if self.session_manager.get_session_type() == SessionType.VIDEO:
-            extension = ".mp4"
-        else:
-            video_format = self.settings_manager.get_video_format()
-            extension = f".{video_format.lower()}"
-
-        result = self.session_manager.export_session(export_dir, filename, extension)
-        if result:
-            logger.info(f"Видео сохранено: {result}")
-        else:
-            logger.error("Ошибка при экспорте видео")
-            return False
-
-        logger.debug("Очистка сессии")
-        self.session_manager.cleanup()
-        self.session_manager.clear_runtime()
-        self.state_manager.finalize_session()
-        logger.debug("StateManager перевёл в IDLE")
+    def finalize_recording(self) -> bool:
+        """Финализация: merge/mux. Вызывается из StateCoordinator._enter_review."""
+        session_type = self.session_manager.get_session_type()
+        if session_type in (SessionType.AUDIO, SessionType.VIDEO):
+            return self.recording_manager.finalize_recording()
         return True
 
     def discard_session(self) -> bool:
@@ -263,6 +267,12 @@ class AppController(QObject):
     def set_auto_hide_editor(self, value: bool):
         self.settings_manager.set_auto_hide_editor(value)
 
+    def get_show_recording_frame(self) -> bool:
+        return self.settings_manager.get_show_recording_frame()
+
+    def set_show_recording_frame(self, value: bool):
+        self.settings_manager.set_show_recording_frame(value)
+
     def get_record_fps(self):
         return self.settings_manager.get_record_fps()
 
@@ -290,6 +300,51 @@ class AppController(QObject):
     def get_screen_timer(self):
         return self.settings_manager.get_screen_timer()
 
+    # ───── Настройки звука ─────
+
+    def get_audio_enabled(self) -> bool:
+        return self.settings_manager.get_audio_enabled(self.session_manager.get_session_type())
+
+    def set_audio_enabled(self, value: bool):
+        
+        self.settings_manager.set_audio_enabled(value, self.session_manager.get_session_type())
+
+    def get_audio_sources(self) -> list:
+        return self.settings_manager.get_audio_sources(self.session_manager.get_session_type())
+
+    def set_audio_sources(self, sources: list):
+        self.settings_manager.set_audio_sources(sources, self.session_manager.get_session_type())
+
+    def get_audio_device(self) -> str:
+        return self.settings_manager.get_audio_device(self.session_manager.get_session_type())
+
+    def set_audio_device(self, device: str):
+        self.settings_manager.set_audio_device(device, self.session_manager.get_session_type())
+
+    def get_audio_timer(self) -> int:
+        return self.settings_manager.get_audio_timer()
+
+    def set_audio_timer(self, seconds: int):
+        self.settings_manager.set_audio_timer(seconds)
+
+    def get_audio_export_filename(self) -> str:
+        return self.settings_manager.get_audio_export_filename()      # геттер для GUI аудио-сессии
+
+    def set_audio_export_filename(self, name: str):
+        self.settings_manager.set_audio_export_filename(name)         # сеттер для GUI аудио-сессии
+
+    def get_audio_sample_rate(self) -> int:
+        return self.settings_manager.get_audio_sample_rate()
+
+    def set_audio_sample_rate(self, value: int):
+        self.settings_manager.set_audio_sample_rate(value)
+
+    def get_audio_channels(self) -> int:
+        return self.settings_manager.get_audio_channels()
+
+    def set_audio_channels(self, value: int):
+        self.settings_manager.set_audio_channels(value)
+
     def set_screen_timer(self, seconds):
         self.settings_manager.set_screen_timer(seconds)
 
@@ -299,6 +354,8 @@ class AppController(QObject):
             return self.settings_manager.get_record_start_delay()
         elif session_type == SessionType.SCREEN:
             return self.settings_manager.get_screen_start_delay()
+        elif session_type == SessionType.AUDIO:
+            return self.settings_manager.get_audio_start_delay()
         return self.settings_manager.get_record_start_delay()
 
     def set_start_delay(self, seconds: int):
@@ -307,6 +364,8 @@ class AppController(QObject):
             self.settings_manager.set_record_start_delay(seconds)
         elif session_type == SessionType.SCREEN:
             self.settings_manager.set_screen_start_delay(seconds)
+        elif session_type == SessionType.AUDIO:
+            self.settings_manager.set_audio_start_delay(seconds)
         else:
             self.settings_manager.set_record_start_delay(seconds)
             self.settings_manager.set_screen_start_delay(seconds)
@@ -317,50 +376,6 @@ class AppController(QObject):
     def set_export_filename(self, name):
         self.settings_manager.set_export_filename(name)
 
-    def get_export_path(self):
-        return self.settings_manager.get_export_path()
-
-    def set_export_path(self, path):
-        self.settings_manager.set_export_path(path)
-
-    def get_video_format(self):
-        return self.settings_manager.get_video_format()
-
-    def set_video_format(self, fmt):
-        self.settings_manager.set_video_format(fmt)
-
-    def get_resolution(self):
-        return self.settings_manager.get_resolution()
-
-    def set_resolution(self, value):
-        self.settings_manager.set_resolution(value)
-
-    def get_bitrate_mode(self):
-        return self.settings_manager.get_bitrate_mode()
-
-    def get_bitrate_value(self):
-        return self.settings_manager.get_bitrate_value()
-
-    def set_bitrate(self, mode, value):
-        self.settings_manager.set_bitrate(mode, value)
-
-    def get_rotation(self):
-        return self.settings_manager.get_rotation()
-
-    def set_rotation(self, angle):
-        self.settings_manager.set_rotation(angle)
-
-    def get_screen_finalize_fps(self):
-        return self.settings_manager.get_screen_finalize_fps()
-
-    def set_screen_finalize_fps(self, fps):
-        self.settings_manager.set_screen_finalize_fps(fps)
-
-    def get_speed_multiplier(self):
-        return self.settings_manager.get_speed_multiplier()
-
-    def set_speed_multiplier(self, multiplier):
-        self.settings_manager.set_speed_multiplier(multiplier)
 
     # =========================================================
     #  Внутренние вспомогательные методы
@@ -384,7 +399,8 @@ class AppController(QObject):
         self.session_manager.set_session_type(session_type)
 
         # Подготавливаем регион для эмуляции записи
-        if state in (AppState.RECORDING, AppState.REVIEW):
+        # Для аудио регион не нужен — координаты не задаём
+        if state in (AppState.RECORDING, AppState.REVIEW) and session_type != SessionType.AUDIO:
             try:
                 self.session_manager.set_raw_coordinates({
                     "x1": 0, "y1": 0, "x2": 800, "y2": 600
@@ -393,10 +409,14 @@ class AppController(QObject):
                 pass
 
         if state in (AppState.PREPARING_VIDEO, AppState.PREPARING_SCREEN,
+                     AppState.PREPARING_AUDIO,
                      AppState.RECORDING, AppState.REVIEW):
-            preparing_state = (AppState.PREPARING_VIDEO
-                               if session_type == SessionType.VIDEO
-                               else AppState.PREPARING_SCREEN)
+            if session_type == SessionType.AUDIO:
+                preparing_state = AppState.PREPARING_AUDIO
+            elif session_type == SessionType.VIDEO:
+                preparing_state = AppState.PREPARING_VIDEO
+            else:
+                preparing_state = AppState.PREPARING_SCREEN
             logger.debug(f"→ Эмуляция {preparing_state}")
             self.state_manager.set_state_dev(preparing_state)
 

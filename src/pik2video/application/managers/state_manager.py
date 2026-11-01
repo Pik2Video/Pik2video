@@ -42,6 +42,10 @@ class StateManager(QObject):
         """Переход в PREPARING_SCREEN."""
         return self._state_machine.prepare_screen()
 
+    def prepare_audio(self) -> bool:
+        """Переход в PREPARING_AUDIO."""
+        return self._state_machine.prepare_audio()
+
     def start_recording(self) -> bool:
         """Переход в WAITING (перед записью)."""
         return self._state_machine.start_recording()
@@ -85,11 +89,18 @@ class StateManager(QObject):
 
     def is_recording(self) -> bool:
         state = self.get_state()
-        return state in (AppState.WAITING, AppState.RECORDING)
+        return state in (AppState.COUNTDOWN, AppState.RECORDING)
 
     def is_preparing(self) -> bool:
         state = self.get_state()
-        return state in (AppState.PREPARING_VIDEO, AppState.PREPARING_SCREEN)
+        return state in (
+            AppState.PREPARING_VIDEO,
+            AppState.PREPARING_SCREEN,
+            AppState.PREPARING_AUDIO,                                 # аудио-подготовка тоже считается "preparing"
+        )
+
+    def is_preparing_audio(self) -> bool:
+        return self.get_state() == AppState.PREPARING_AUDIO          # отдельный предикат для аудио
 
     def is_review(self) -> bool:
         return self.get_state() == AppState.REVIEW

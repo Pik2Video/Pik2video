@@ -29,6 +29,14 @@ class SessionService:
         """Вернуть путь к видеофайлу в текущей сессии."""
         return self.storage.get_video_path()
 
+    def get_audio_path(self):
+        """Вернуть путь к аудиофайлу в текущей сессии."""
+        return self.storage.get_audio_path()
+
+    def get_session_dir(self):
+        """Путь к папке текущей сессии (или None)."""
+        return self.storage.session_dir                                   # сессия — атрибут storage
+
     def export_session(self, target_dir: Path, filename: str, extension: str = ".mp4") -> Optional[Path]:
         """
         Экспортирует видео.

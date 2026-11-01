@@ -6,3 +6,4 @@ from enum import Enum
 class SessionType(Enum):
     VIDEO = "video"
     SCREEN = "screen"
+    AUDIO = "audio"    # сессия записи только звука

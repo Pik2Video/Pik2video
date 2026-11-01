@@ -4,7 +4,7 @@ import logging
 
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QCloseEvent
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from .close_policy import (
     CloseAction,
@@ -14,6 +14,7 @@ from .close_policy import (
     evaluate_close,
 )
 from .dialogs import confirm
+from .styles import DIALOG_QSS
 from .utils import keep_window_inside_screen
 
 logger = logging.getLogger(__name__)
@@ -124,22 +125,7 @@ class BaseFormDialog(BaseDialog):
         self.setFixedSize(size.width(), size.height() + 38)
 
         # Стили кнопок (CSS)
-        self.setStyleSheet("""
-        QPushButton {
-            background-color: #3a3a3a;
-            border: 1px solid #555;
-            border-radius: 4px;
-            padding: 6px 16px;
-        }
-
-        QPushButton:hover {
-            background-color: #4a4a4a;
-        }
-
-        QPushButton:pressed {
-            background-color: #2a2a2a;
-        }
-        """)
+        self.setStyleSheet(DIALOG_QSS)
 
 
     def _build_layout(self):
@@ -155,13 +141,8 @@ class BaseFormDialog(BaseDialog):
 
         # Виджет-контейнер для содержимого
         self.content_widget = QWidget()
-
-        # Стили для блока контента
-        self.content_widget.setStyleSheet("""
-            background-color: #2f2f2f;
-            border: 1px solid #444;
-            border-radius: 6px;
-        """)
+        self.content_widget.setObjectName("contentWidget")
+        # QSS для QWidget#contentWidget — в styles.DIALOG_QSS
 
         # Layout внутри контента
         self.content_layout = QVBoxLayout(self.content_widget)
@@ -242,6 +223,7 @@ class SettingsDialog(BaseFormDialog):
         # Кнопка "принять" (текст будет установлен в retranslate_buttons)
         self.btn_apply = QPushButton("")
 
+
         # Минимальная ширина кнопок
         self.btn_cancel.setMinimumWidth(160)
         self.btn_apply.setMinimumWidth(160)
@@ -268,6 +250,17 @@ class SettingsDialog(BaseFormDialog):
         if result:
             self.close()
 
+    def _make_section_label(self, text: str) -> QLabel:
+        """Заголовок-секция (серый, мелкий, bold, по центру) — например, «Дополнительно»."""
+        label = QLabel(text)
+        label.setAlignment(Qt.AlignCenter)
+        label.setStyleSheet(
+            "color: #888; font-size: 11px; font-weight: bold; "
+            "background: transparent; border: none; "
+            "padding-top: 12px; padding-bottom: 4px;"
+        )
+        return label
+
     def eventFilter(self, obj, event):
         if obj == self._parent and event.type() == QEvent.Move:
             # Обновить позицию при перемещении родителя
@@ -276,6 +269,13 @@ class SettingsDialog(BaseFormDialog):
                 center_to_parent(self, self._parent)
                 keep_window_inside_screen(self)
         return super().eventFilter(obj, event)
+
+    def mousePressEvent(self, event):
+        """Клик в пустое место окна — сбросить фокус с активного поля."""
+        fw = self.focusWidget()
+        if fw is not None and fw is not self:
+            fw.clearFocus()
+        super().mousePressEvent(event)
 
     def apply_settings(self) -> bool:
         # Метод для применения настроек (переопределяется)

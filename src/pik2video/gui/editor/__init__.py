@@ -3,14 +3,14 @@
 Пакет редактора видео.
 """
 
-from .drop_zone import DropZone
-from .export_service import ExportService
+from .panels import DropZone
+from .export import ExportService
 from .player import PlayerWidget
 from .state import EditorState
 from .timeline import TimelineWidget
-from .tools_panel import ToolsPanel
-from .video_files_panel import VideoFilesPanel
-from .volume import VolumeControl
+from .panels import ToolsPanel
+from .panels import VideoFilesPanel
+from .player import VolumeControl
 from .window import EditorWindow
 
 __all__ = [

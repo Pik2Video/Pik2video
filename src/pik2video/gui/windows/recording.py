@@ -35,6 +35,7 @@ class RecordingWindow(QMainWindow):
     """Окно с активной сессией записи."""
 
     window_state_changed = Signal(Qt.WindowStates, Qt.WindowStates)
+    settings_visibility_changed = Signal(bool)   # проброс от текущей CaptureSession
 
     def __init__(self, controller):
         super().__init__()
@@ -127,7 +128,6 @@ class RecordingWindow(QMainWindow):
         from src.pik2video.gui.capture.sessions import VideoCaptureSession
 
         session = VideoCaptureSession(controller)
-        session.back_requested.connect(controller.cancel_session)
         self.current_session = session
 
         session.start_requested.connect(controller.start_recording)
@@ -141,6 +141,8 @@ class RecordingWindow(QMainWindow):
         controller.time_updated.connect(session.set_time)
         controller.ram_updated.connect(session.set_ram)
         controller.shots_updated.connect(session.set_shots)
+        controller.preparation_started.connect(session.set_preparation_mode)
+        session.settings_visibility_changed.connect(self.settings_visibility_changed.emit)
 
         self.set_screen(session)
         self.setFixedSize(430, 80)
@@ -150,7 +152,6 @@ class RecordingWindow(QMainWindow):
         from src.pik2video.gui.capture.sessions import ScreenCaptureSession
 
         session = ScreenCaptureSession(controller)
-        session.back_requested.connect(controller.cancel_session)
         self.current_session = session
 
         session.start_requested.connect(controller.start_recording)
@@ -164,10 +165,36 @@ class RecordingWindow(QMainWindow):
         controller.time_updated.connect(session.set_time)
         controller.ram_updated.connect(session.set_ram)
         controller.shots_updated.connect(session.set_shots)
+        controller.preparation_started.connect(session.set_preparation_mode)
+        session.settings_visibility_changed.connect(self.settings_visibility_changed.emit)
 
         self.set_screen(session)
         self.setFixedSize(430, 80)
         keep_window_inside_screen(self)
+
+    def show_audio_session(self, controller):
+        """Показать аудио-сессию записи."""
+        from src.pik2video.gui.capture.sessions import AudioCaptureSession
+
+        session = AudioCaptureSession(controller)
+        self.current_session = session
+
+        session.start_requested.connect(controller.start_recording)
+        session.stop_requested.connect(controller.stop_recording)
+        session.cancel_requested.connect(controller.cancel_session)
+
+        session.time_update_requested.connect(controller.update_time)
+        session.ram_update_requested.connect(controller.update_ram)
+        session.cpu_update_requested.connect(session._update_cpu)      # CPU обновляется внутри самой сессии
+
+        controller.time_updated.connect(session.set_time)
+        controller.ram_updated.connect(session.set_ram)
+        controller.audio_level_updated.connect(session.set_audio_level) # уровень сигнала → индикатор в панели
+        controller.preparation_started.connect(session.set_preparation_mode)
+        session.settings_visibility_changed.connect(self.settings_visibility_changed.emit)
+
+        self.set_screen(session)
+        self.setFixedSize(430, 80)
 
     # ── Закрытие ──
 
@@ -177,7 +204,8 @@ class RecordingWindow(QMainWindow):
 
         state = self.controller.state_manager.get_state()
 
-        if state in (AppState.PREPARING_VIDEO, AppState.PREPARING_SCREEN, AppState.WAITING):
+        if state in (AppState.PREPARING_VIDEO, AppState.PREPARING_SCREEN,
+                     AppState.PREPARING_AUDIO, AppState.COUNTDOWN):    # аудио-подготовка тоже отменяема
             return ClosePolicy.CANCEL_PREPARING
         if state == AppState.RECORDING:
             return ClosePolicy.CONFIRM_IF_RECORDING

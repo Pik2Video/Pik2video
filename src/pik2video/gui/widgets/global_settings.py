@@ -167,3 +167,14 @@ class AutoHideEditorSetting(QCheckBox):
 
     def get_value(self):
         return self.isChecked()
+
+
+class ShowRecordingFrameSetting(QCheckBox):
+    """Показывать серебристую рамку захвата во время записи."""
+    def __init__(self, controller):
+        super().__init__()
+        self.setChecked(controller.get_show_recording_frame())
+        self.setText("")
+
+    def get_value(self):
+        return self.isChecked()

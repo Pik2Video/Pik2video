@@ -30,7 +30,7 @@ class Translator(QObject):
                 locale_dir = Path(sys._MEIPASS) / "pik2video" / "locale"
             elif hasattr(sys, 'executable'):
                 exe_path = Path(sys.executable)
-                locale_dir = exe_path.parent / "Resources" / "locale"
+                locale_dir = exe_path.parent.parent / "Resources" / "locale"
             else:
                 locale_dir = Path("locale")
         else:

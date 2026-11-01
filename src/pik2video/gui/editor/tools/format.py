@@ -23,15 +23,15 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_FORMATS = ["MP4", "MKV", "AVI", "MOV", "GIF"]
 
-
 class FormatTool(QWidget):
-    """Кнопка-меню для выбора формата видео."""
+    """Кнопка-меню для выбора формата."""
 
     valueChanged = Signal(str)
 
     def __init__(self, initial: str = "MP4", parent=None):
         super().__init__(parent)
-        self._current = initial if initial in ALLOWED_FORMATS else "MP4"
+        self._formats = list(ALLOWED_FORMATS)                       # текущий список форматов
+        self._current = initial if initial in self._formats else self._formats[0]
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -63,19 +63,31 @@ class FormatTool(QWidget):
             QMenu::item { padding: 4px 20px; }
             QMenu::item:selected { background-color: #3a3a3a; }
         """)
-        for fmt in ALLOWED_FORMATS:
+
+        self._rebuild_menu()                                        # строим меню по текущему списку
+        self._btn.setMenu(self._menu)
+        layout.addWidget(self._btn)
+
+    def _rebuild_menu(self):
+        """Перестроить меню по self._formats."""
+        self._menu.clear()
+        for fmt in self._formats:
             action = QAction(fmt, self)
             action.triggered.connect(lambda checked=False, f=fmt: self.set_value(f))
             self._menu.addAction(action)
 
-        self._btn.setMenu(self._menu)
-        layout.addWidget(self._btn)
+    def set_formats(self, formats: list, current: str):
+        """Заменить список форматов (например, при переключении видео ↔ аудио)."""
+        self._formats = list(formats)
+        self._current = current if current in self._formats else self._formats[0]
+        self._btn.setText(self._current)
+        self._rebuild_menu()
 
     def get_value(self) -> str:
         return self._current
 
     def set_value(self, fmt: str):
-        if fmt not in ALLOWED_FORMATS:
+        if fmt not in self._formats:
             return
         if self._current == fmt:
             return

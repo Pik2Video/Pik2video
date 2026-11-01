@@ -9,7 +9,8 @@ class AppState(Enum):
     IDLE = auto()
     PREPARING_VIDEO = auto()
     PREPARING_SCREEN = auto()
-    WAITING = auto()      # 🆕 отсчёт перед стартом
+    PREPARING_AUDIO = auto()    # подготовка к записи только звука
+    COUNTDOWN = auto()
     RECORDING = auto()
     REVIEW = auto()
 
@@ -62,11 +63,22 @@ class StateMachine(QObject):
         self._set_state(AppState.PREPARING_SCREEN)
         return True
 
+    def can_prepare_audio(self) -> bool:
+        return self._state == AppState.IDLE              # переход в аудио возможен только из IDLE
+
+    def prepare_audio(self) -> bool:
+        if not self.can_prepare_audio():
+            return False
+        self._set_state(AppState.PREPARING_AUDIO)        # переводим в состояние подготовки аудио
+        return True
+
     # ----------------------------------------
     # ========TRANSITIONS TO RECORDING========
     # ----------------------------------------
 
     def can_start_recording(self, region_defined: bool) -> bool:
+        if self._state == AppState.PREPARING_AUDIO:
+            return True                                 # для аудио регион не требуется
         return (
             self._state in (AppState.PREPARING_VIDEO, AppState.PREPARING_SCREEN)
             and region_defined
@@ -76,15 +88,16 @@ class StateMachine(QObject):
         if self._state not in (
             AppState.PREPARING_VIDEO,
             AppState.PREPARING_SCREEN,
+            AppState.PREPARING_AUDIO,          # старт записи возможен и из аудио-подготовки
         ):
             return False
 
-        self._set_state(AppState.WAITING)
+        self._set_state(AppState.COUNTDOWN)
         return True
 
     def begin_recording(self) -> bool:
-        """Переход из WAITING в RECORDING (после задержки)"""
-        if self._state != AppState.WAITING:
+        """Переход из COUNTDOWN в RECORDING (после задержки)"""
+        if self._state != AppState.COUNTDOWN:
             return False
         self._set_state(AppState.RECORDING)
         return True
@@ -94,7 +107,7 @@ class StateMachine(QObject):
     # ---------------------------------------
 
     def can_stop_recording(self) -> bool:
-        return self._state in (AppState.RECORDING, AppState.WAITING)
+        return self._state in (AppState.RECORDING, AppState.COUNTDOWN)
 
     def stop_recording(self) -> bool:
         if not self.can_stop_recording():
@@ -135,7 +148,8 @@ class StateMachine(QObject):
         return self._state in (
             AppState.PREPARING_VIDEO,
             AppState.PREPARING_SCREEN,
-            AppState.WAITING,
+            AppState.PREPARING_AUDIO,      # отмена возможна и из аудио-подготовки
+            AppState.COUNTDOWN,
         )
 
     def cancel_preparing(self) -> bool:
@@ -151,3 +165,4 @@ class StateMachine(QObject):
     def set_state_dev(self, state: AppState):
         """Установить состояние напрямую (только для разработки)"""
         self._state = state
+        self.state_changed.emit(state)

@@ -21,6 +21,7 @@ src/
         storage/
             __init__.py
             session_storage.py
+            thumbnail_cache.py
             __pycache__/
         gui/
             __init__.py
@@ -37,10 +38,17 @@ src/
                 base.py
                 blink_style.py
                 close_policy.py
+                cursor_manager.py
                 dialogs.py
                 tooltip.py
                 utils.py
                 __pycache__/
+                styles/
+                    __init__.py
+                    dialogs.py
+                    editor.py
+                    recording.py
+                    __pycache__/
             windows/
                 __init__.py
                 ffmpeg_missing.py
@@ -49,23 +57,10 @@ src/
                 __pycache__/
             editor/
                 __init__.py
-                bottom_panel.py
                 crop_mode.py
-                drop_area.py
-                drop_zone.py
-                export_controller.py
-                export_dialog.py
-                export_service.py
-                frame_preview.py
-                global_settings_panel.py
-                player.py
                 record_menu.py
                 state.py
-                timeline.py
-                tools_panel.py
-                top_bar.py
-                video_files_panel.py
-                volume.py
+                thumbnail_loader.py
                 window.py
                 tools/
                     __init__.py
@@ -75,26 +70,58 @@ src/
                     rotation.py
                     speed.py
                     __pycache__/
+                panels/
+                    __init__.py
+                    bottom_panel.py
+                    drop_area.py
+                    drop_zone.py
+                    file_tile.py
+                    global_settings_panel.py
+                    link_button.py
+                    tools_panel.py
+                    top_bar.py
+                    video_files_panel.py
+                    __pycache__/
                 __pycache__/
+                export/
+                    __init__.py
+                    controller.py
+                    dialog.py
+                    service.py
+                    __pycache__/
+                timeline/
+                    __init__.py
+                    audio.py
+                    frame_preview.py
+                    seek_bar.py
+                    video.py
+                    zone.py
+                    __pycache__/
+                player/
+                    __init__.py
+                    surface.py
+                    volume.py
+                    widget.py
+                    __pycache__/
             widgets/
                 __init__.py
+                audio_settings.py
                 common_settings.py
-                finalize_common_settings.py
-                finalize_screen_settings.py
                 global_settings.py
                 record_settings.py
                 screen_settings.py
                 setting_row.py
                 __pycache__/
-            components_settings/
         application/
             __init__.py
+            audio_recorder_service.py
             controller.py
             recording_service.py
             session_service.py
             session_types.py
             settings_model.py
             state_machine.py
+            system_audio_recorder_service.py
             managers/
                 __init__.py
                 ffmpeg_manager.py
@@ -110,7 +137,6 @@ src/
                 ffmpeg_service.py
                 installer.py
                 __pycache__/
-            storage/
             system/
                 __init__.py
                 platform_detector.py
@@ -118,8 +144,4 @@ src/
             logging/
                 __init__.py
                 logger_setup.py
-    data/
-        drafts/
-        tmp/
-            session_20261002_233135/
-            session_20261002_232819/
+                __pycache__/

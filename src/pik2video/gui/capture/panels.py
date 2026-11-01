@@ -1,7 +1,16 @@
 # src/pik2video/gui/capture/panels.py
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QBrush, QColor, QFont, QFontDatabase, QLinearGradient, QPainter
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from src.pik2video.gui.common.blink_style import (
     LABEL_ALPHA_BRIGHT,
@@ -11,233 +20,327 @@ from src.pik2video.gui.common.blink_style import (
 from src.pik2video.gui.common.tooltip import TooltipButton
 
 
+class RedDot(QWidget):
+    """Красная точка — индикатор активной записи (статичная, без мигания)."""
+
+    SIZE = 10
+    COLOR = "#c0392b"
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(self.SIZE, self.SIZE)
+        self.hide()
+
+    def start(self):
+        self.show()
+
+    def stop(self):
+        self.hide()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(QColor(self.COLOR))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(0, 0, self.SIZE, self.SIZE)
+
+
+class AudioLevelIndicator(QWidget):
+    """Индикатор уровня звука: тонкие полоски от центра с цветовым градиентом."""
+
+    HEIGHT = 30                          # высота виджета
+    BAR_WIDTH = 2                        # ширина одной полоски в пикселях
+    GAP = 5                              # зазор между полосками
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumHeight(self.HEIGHT)
+        self.setMinimumWidth(150)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._level = 0.0
+
+    def set_level(self, level: float):
+        self._level = max(0.0, min(1.0, level))
+        self.update()
+
+    def reset(self):
+        self._level = 0.0
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        w = self.width()
+        h = self.height()
+        if w <= 0 or h <= 0:
+            return
+
+        center_y = h / 2.0                          # невидимая горизонтальная линия центра
+        max_half = center_y - 1.0                   # максимальная длина полоски от центра
+
+        bw = self.BAR_WIDTH
+        gap = self.GAP
+        n = max(1, int(w / (bw + gap)))             # число полосок — по ширине виджета
+        total_w = n * bw + (n - 1) * gap            # фактическая ширина всех полосок с зазорами
+        offset_x = (w - total_w) / 2.0              # центрируем блок по горизонтали
+
+        grad = QLinearGradient(0, 0, 0, h)
+        grad.setColorAt(0.00, QColor("#8b1a1a"))    # вишнёвый у верхней границы
+        grad.setColorAt(0.20, QColor("#b8860b"))    # тёмно-янтарный
+        grad.setColorAt(0.45, QColor("#c0c0c0"))    # серебристый
+        grad.setColorAt(0.55, QColor("#c0c0c0"))    # серебристый
+        grad.setColorAt(0.80, QColor("#b8860b"))    # тёмно-янтарный
+        grad.setColorAt(1.00, QColor("#8b1a1a"))    # вишнёвый у нижней границы
+
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(grad))
+
+        for i in range(n):
+            x = offset_x + i * (bw + gap)
+
+            distance = abs(i - (n - 1) / 2.0) / ((n - 1) / 2.0) if n > 1 else 0.0
+            weight = 1.0 - 0.4 * distance                       # центр = 1.0, край = 0.6
+
+            half = self._level * max_half * weight
+            if half < 0.5:
+                continue
+
+            painter.drawRoundedRect(
+                x, center_y - half, bw, half * 2.0,
+                bw / 2.0, bw / 2.0
+            )
+
+
+
+
+
+
 class CapturePanel(QWidget):
     """
-    Общая UI-панель для Video и Screen сценария.
+    Общая UI-панель для Video, Screen и Audio сценариев.
 
-    PREPARING  → по центру кнопка настроек
-    RECORDING  → по центру двухстрочный статус (RAM / SHOTS / TIME)
+    Верх (чёрное поле):
+        - страница 0 (Video/Screen): три метки — параметры записи
+        - страница 1 (Audio): имя источника + индикатор уровня
+    Низ:
+        - страница 0: кнопка настроек по центру
+        - страница 1: две метки сверху + таймер снизу
+    Красная точка в правом верхнем углу — индикатор активной записи.
     """
-    # Общая высота нижнего блока управления
-    BOTTOM_HEIGHT = 35
 
-    # Размеры кнопок START / STOP
-    BUTTON_WIDTH = 130     
-    BUTTON_HEIGHT = 27    
-
-    # Размер центральных элементов
+    BOTTOM_HEIGHT = 42
+    BUTTON_WIDTH = 110
+    BUTTON_HEIGHT = 32
     SETTINGS_WIDTH = 60
-    STATUS_WIDTH = 130
-
     BLOCK_VERTICAL_MARGIN = 4
 
     def __init__(self, parent, controller=None):
         super().__init__(parent)
         self.controller = controller
         self.translator = controller.get_translator() if controller else None
+
+        # Последний валидный текст инфополя (для восстановления после ошибки)
+        self._last_info_text: str = ""
+        # Активна ли сейчас ошибка (блокирует blink-перерисовку стиля)
+        self._error_active: bool = False
+        # Таймер сброса ошибки
+        self._error_timer = None
+
         self._build_ui()
-        
-        # Подключаем локализацию, если есть controller
+
         if self.translator:
             self.setup_localization()
-    
+
     def setup_localization(self):
-        """Подключаем систему переводов"""
         self.translator.language_changed.connect(self.retranslate_ui)
         self.retranslate_ui()
-    
+
     def retranslate_ui(self):
-        """Обновляет тексты на кнопках при смене языка"""
         self.btn_start.setText(self.translator.tr("start_button"))
         self.btn_stop.setText(self.translator.tr("stop_button"))
-
-        # обновляем всплывающие подсказки у кнопок
-        self.btn_back.set_tooltip(self.translator.tr("back_tooltip"))
-
-        # обновляем подсказку у кнопки информации
-        self.btn_info.set_tooltip(self.translator.tr("info_tooltip"))
-
-        # обновляем подсказку у кнопки предварительных настроек
         self.btn_settings.set_tooltip(self.translator.tr("capture_settings_tooltip"))
 
-        
-        # Метки TIME, RAM, SHOTS НЕ переводим - оставляем на английском
-    
     # ─────────────────────────────────────────
     # UI
     # ─────────────────────────────────────────
 
     def _build_ui(self):
-
-        # Корневой layout всей панели (вертикальный)
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ==========================================================
-        # Верхняя информационная зона
-        # ==========================================================
-        
-        # Общий контейнер строки (кнопка назад + чёрное поле + 📄)
+        # ── Верхняя строка ──
         top_row = QHBoxLayout()
         top_row.setContentsMargins(2, 2, 2, 0)
         top_row.setSpacing(2)
 
-        # Кнопка НАЗАД (вне чёрного поля, слева)
-        self.btn_back = TooltipButton("⬅️")
-        self.btn_back.setFixedSize(26, 24)
-        self.btn_back.setStyleSheet("font-size:11px; background:#282828; border:1px solid #555; border-radius:4px;")
-
-
-        # Чёрное поле (три колонки)
         self.top_widget = QWidget()
         self.top_widget.setStyleSheet("background:#1f1f1f; border-radius:4px;")
 
-        info_layout = QHBoxLayout(self.top_widget)
-        info_layout.setContentsMargins(35, 4, 25, 4)
+        self.info_stack = QStackedWidget(self.top_widget)
+        self.info_stack.setStyleSheet("background: transparent; border: none;")
 
-        # Левый текст (фиксированный, не растягивается)
+        # Страница 0 — три метки для видео/скрина
+        video_info_page = QWidget()
+        video_info_page.setStyleSheet("background: transparent; border: none;")
+        info_layout = QHBoxLayout(video_info_page)
+        info_layout.setContentsMargins(12, 4, 12, 4)
+        info_layout.setSpacing(6)
+
         self.left_label = QLabel("")
         self.left_label.setStyleSheet("color: #a0a0a0; font-size: 12px;")
         self.left_label.setAlignment(Qt.AlignLeft)
         self.left_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
-        self.left_label.hide()  # скрываем по умолчанию
 
-        # Центральный текст (растягивается, забирает всё свободное место)
         self.center_label = QLabel("")
-        self.center_label.setStyleSheet("color:white; font-size: 12px;")
+        self.center_label.setStyleSheet("color: white; font-size: 12px;")
         self.center_label.setAlignment(Qt.AlignCenter)
-        self.center_label.setWordWrap(False)  # НЕ переносить на новую строку
+        self.center_label.setWordWrap(False)
         self.center_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
 
-        # Правый текст (фиксированный)
         self.right_label = QLabel("")
         self.right_label.setStyleSheet("color: #a0a0a0; font-size: 12px;")
         self.right_label.setAlignment(Qt.AlignRight)
         self.right_label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
-        self.right_label.hide()  # скрываем по умолчанию
 
-        # Добавляем с коэффициентами растяжения (stretch)
-        info_layout.addWidget(self.left_label, 0)      # 0 = НЕ растягивается
-        info_layout.addWidget(self.center_label, 1)    # 1 = растягивается (забирает всё лишнее)
-        info_layout.addWidget(self.right_label, 0)     # 0 = НЕ растягивается
+        info_layout.addWidget(self.left_label, 0)
+        info_layout.addWidget(self.center_label, 1)
+        info_layout.addWidget(self.right_label, 0)
 
-        # Кнопка 📄 (вне чёрного поля, справа)
-        self.btn_info = TooltipButton("📄")
-        self.btn_info.setFixedSize(26, 24)
-        self.btn_info.setStyleSheet("font-size:11px; background:#282828; border:1px solid #555; border-radius:4px;")
-        self.btn_info.setEnabled(False)  # пока не используется
+        self.info_stack.addWidget(video_info_page)
 
-        top_row.addWidget(self.btn_back)
-        top_row.addWidget(self.top_widget, stretch=1)  # чёрное поле растягивается
-        top_row.addWidget(self.btn_info)
+        # Страница 1 — индикатор звука
+        audio_info_page = QWidget()
+        audio_info_page.setStyleSheet("background: transparent; border: none;")
+        audio_layout = QHBoxLayout(audio_info_page)
+        audio_layout.setContentsMargins(12, 4, 12, 4)
+        audio_layout.setSpacing(6)
+
+        self.audio_level = AudioLevelIndicator()
+        audio_layout.addWidget(self.audio_level, 1)
+
+        self.info_stack.addWidget(audio_info_page)
+
+        # Страница 2 — подготовка файла
+        prepare_page = QWidget()
+        prepare_page.setStyleSheet("background: transparent; border: none;")
+        prepare_layout = QHBoxLayout(prepare_page)
+        prepare_layout.setContentsMargins(12, 4, 12, 4)
+
+        self.prepare_label = QLabel("// подготовка файла //")
+        self.prepare_label.setAlignment(Qt.AlignCenter)
+        self.prepare_label.setStyleSheet(
+            "color: #d4a843; font-size: 11px; font-weight: bold;"
+        )
+        prepare_layout.addWidget(self.prepare_label)
+
+        self.info_stack.addWidget(prepare_page)
+
+        top_widget_layout = QHBoxLayout(self.top_widget)
+        top_widget_layout.setContentsMargins(0, 0, 0, 0)
+        top_widget_layout.addWidget(self.info_stack)
+
+        self.red_dot = RedDot()
+
+        top_row.addWidget(self.top_widget, stretch=1)
 
         root.addLayout(top_row)
 
-        # ==========================================================
-        # Нижний блок управления
-        # ==========================================================
+        # ── Нижняя панель ──
         bottom_widget = QWidget()
         bottom_widget.setFixedHeight(self.BOTTOM_HEIGHT)
         bottom_widget.setStyleSheet("background:#282828;")
 
         bottom_layout = QHBoxLayout(bottom_widget)
-        bottom_layout.setContentsMargins(8, self.BLOCK_VERTICAL_MARGIN, 8, self.BLOCK_VERTICAL_MARGIN)
+        bottom_layout.setContentsMargins(
+            8, self.BLOCK_VERTICAL_MARGIN, 8, self.BLOCK_VERTICAL_MARGIN
+        )
         bottom_layout.setSpacing(10)
 
-        # Кнопка START (текст будет установлен в retranslate_ui)
         self.btn_start = QPushButton("")
         self.btn_start.setFixedSize(self.BUTTON_WIDTH, self.BUTTON_HEIGHT)
         self.btn_start.setStyleSheet("font-size:15px;")
 
-        # Кнопка STOP (текст будет установлен в retranslate_ui)
         self.btn_stop = QPushButton("")
         self.btn_stop.setFixedSize(self.BUTTON_WIDTH, self.BUTTON_HEIGHT)
         self.btn_stop.setStyleSheet("font-size:15px;")
         self.btn_stop.setEnabled(False)
 
-        # ==========================================================
-        # Центральный стек
-        # ==========================================================
-
         self.center_stack = QStackedWidget()
-        self.center_stack.setFixedHeight(self.BUTTON_HEIGHT * 1)  # увеличена высота для двух строк
+        self.center_stack.setFixedHeight(self.BUTTON_HEIGHT)
 
-        # Страница 0 — SETTINGS
+        # Страница 0 — кнопка настроек
         settings_page = QWidget()
         settings_layout = QHBoxLayout(settings_page)
         settings_layout.setContentsMargins(0, 0, 0, 0)
         settings_layout.setSpacing(0)
-
-        # Добавляем растяжку сверху и снизу для центрирования
         settings_layout.addStretch()
-
-        h_layout = QHBoxLayout()
-        h_layout.addStretch()
 
         self.btn_settings = TooltipButton("⚙️")
         self.btn_settings.setFixedSize(self.SETTINGS_WIDTH, self.BUTTON_HEIGHT)
         self.btn_settings.setStyleSheet("font-size:13px;")
 
-        h_layout.addWidget(self.btn_settings)
-        h_layout.addStretch()
-
-        settings_layout.addStretch()
         settings_layout.addWidget(self.btn_settings)
         settings_layout.addStretch()
 
         self.center_stack.addWidget(settings_page)
 
-        # Страница 1 — RECORDING STATUS (RAM и CPU, каждый в своей строке)
+        # Страница 1 — две метки сверху + таймер снизу
         self.status_page = QWidget()
-        status_layout = QHBoxLayout(self.status_page)
+        status_layout = QVBoxLayout(self.status_page)
         status_layout.setContentsMargins(0, 0, 0, 0)
         status_layout.setSpacing(0)
 
-        status_layout.addStretch()
+        labels_row = QHBoxLayout()
+        labels_row.setContentsMargins(0, 0, 0, 0)
+        labels_row.setSpacing(12)
+        labels_row.addStretch()
 
-        status_container = QWidget()
-        status_container.setFixedSize(self.STATUS_WIDTH, self.BUTTON_HEIGHT * 1)  # высота под две строки
+        status_font = QFont(QFontDatabase.systemFont(QFontDatabase.FixedFont))
+        status_font.setPointSize(10)
 
-        status_container_layout = QVBoxLayout(status_container)
-        status_container_layout.setContentsMargins(4, 2, 4, 2)
-        status_container_layout.setSpacing(4)
+        self.status_label_1 = QLabel("")
+        self.status_label_1.setStyleSheet("color: #ccc; font-size: 10px;")
+        self.status_label_1.setAlignment(Qt.AlignCenter)
+        self.status_label_1.setFont(status_font)
+        self.status_label_1.setMinimumWidth(75)
 
-        # ========== СТРОКА 1: RAM ==========
-        ram_row = QHBoxLayout()
-        ram_row.setContentsMargins(0, 0, 0, 0)
+        self.status_label_2 = QLabel("")
+        self.status_label_2.setStyleSheet("color: #ccc; font-size: 10px;")
+        self.status_label_2.setAlignment(Qt.AlignCenter)
+        self.status_label_2.setFont(status_font)
+        self.status_label_2.setMinimumWidth(55)
 
-        self.ram_label = QLabel("RAM: 0 KB")
-        self.ram_label.setStyleSheet("color:white; font-size:11px; font-weight:500;")
-        self.ram_label.setAlignment(Qt.AlignCenter)
+        labels_row.addWidget(self.status_label_1)
+        labels_row.addWidget(self.status_label_2)
+        labels_row.addStretch()
 
-        ram_row.addStretch()
-        ram_row.addWidget(self.ram_label)
-        ram_row.addStretch()
+        status_layout.addLayout(labels_row)
 
-        # ========== СТРОКА 2: CPU ==========
-        cpu_row = QHBoxLayout()
-        cpu_row.setContentsMargins(0, 0, 0, 0)
+        timer_row = QHBoxLayout()
+        timer_row.setContentsMargins(0, 0, 0, 0)
+        timer_row.setSpacing(6)
+        timer_row.addStretch()
 
-        self.cpu_label = QLabel("CPU: 0 %")
-        self.cpu_label.setStyleSheet("color:white; font-size:11px; font-weight:500;")
-        self.cpu_label.setAlignment(Qt.AlignCenter)
+        self.timer_label = QLabel("TIME: 00:00:00")
+        self.timer_label.setStyleSheet(
+            "color: white; font-size: 13px; font-weight: bold;"
+        )
+        self.timer_label.setAlignment(Qt.AlignCenter)
+        timer_font = QFont(QFontDatabase.systemFont(QFontDatabase.FixedFont))
+        timer_font.setPointSize(13)
+        timer_font.setBold(True)
+        self.timer_label.setFont(timer_font)
+        self.timer_label.setMinimumWidth(150)
+        timer_row.addWidget(self.timer_label)
 
-        cpu_row.addStretch()
-        cpu_row.addWidget(self.cpu_label)
-        cpu_row.addStretch()
+        timer_row.addWidget(self.red_dot)
+        timer_row.addStretch()
 
-        status_container_layout.addLayout(ram_row)
-        status_container_layout.addLayout(cpu_row)
-
-        status_layout.addWidget(status_container)
-        status_layout.addStretch()
+        status_layout.addLayout(timer_row)
 
         self.center_stack.addWidget(self.status_page)
-
-        # ==========================================================
-        # Сборка нижнего layout
-        # ==========================================================
 
         bottom_layout.addWidget(self.btn_start)
         bottom_layout.addWidget(self.center_stack, 1)
@@ -245,149 +348,139 @@ class CapturePanel(QWidget):
 
         root.addWidget(bottom_widget)
 
-        # По умолчанию активен режим PREPARING
         self.set_preparing_mode()
 
+    # ─────────────────────────────────────────
+    # Режимы панели
+    # ─────────────────────────────────────────
 
-    # ─────────────────────────────────────────
-    # Режимы
-    # ─────────────────────────────────────────
     def set_preparing_mode(self):
+        """Центр показывает кнопку настроек, красная точка скрыта."""
         self.center_stack.setCurrentIndex(0)
+        self.red_dot.stop()
 
     def set_recording_mode(self):
-        """Переключить на страницу статуса (RAM/CPU)"""
-        if hasattr(self, 'status_page') and self.status_page:
-            self.center_stack.setCurrentWidget(self.status_page)
-        else:
-            self.center_stack.setCurrentIndex(1)  # fallback
+        """Центр переключён на страницу статуса, красная точка пульсирует."""
+        self.center_stack.setCurrentWidget(self.status_page)
+        self.red_dot.start()
 
-    # 🆕 НОВЫЙ МЕТОД — вставить здесь
     def set_waiting_mode(self):
-        """Показать режим ожидания (отсчёт перед стартом)"""
-        self.center_stack.setCurrentIndex(1)  # страница статуса
-        self.ram_label.setText("Ожидание...")
-        #self.time_label.setText("")
+        """Режим ожидания перед стартом записи."""
+        self.center_stack.setCurrentWidget(self.status_page)
+        self.status_label_1.setText("")
+        self.status_label_2.setText("")
+        self.timer_label.setText("TIME: 00:00:00")
+
+    def set_preparation_mode(self):
+        """Показать «Подготовка файла», заблокировать кнопки."""
+        self.info_stack.setCurrentIndex(2)                # prepare_page
+        self.center_stack.setCurrentWidget(self.status_page)
+        self.btn_start.setEnabled(False)
+        self.btn_stop.setEnabled(False)
+        self.btn_settings.setEnabled(False)
 
     # ─────────────────────────────────────────
-    # Обновление текста верхней панели
+    # Чёрное поле — инфо
     # ─────────────────────────────────────────
+
+    def show_video_info(self, left_text: str, right_text: str):
+        """Видео/скрин: слева и справа метки параметров, центр пустой."""
+        self.info_stack.setCurrentIndex(0)
+        self.left_label.setText(left_text)
+        self.center_label.setText("")
+        self.right_label.setText(right_text)
+
+    def show_audio_info(self):
+        """Аудио: только индикатор уровня (без текста источника)."""
+        self.info_stack.setCurrentIndex(1)
+        self.audio_level.reset()
+
+    def set_audio_level(self, level: float):
+        """Обновить уровень индикатора звука (0.0 … 1.0)."""
+        self.audio_level.set_level(level)
+
     def set_info_text(self, text: str):
+        """Показать текст в центральной метке чёрного поля.
+
+        Обновляет «последний валидный текст» и снимает активную ошибку
+        (если она была — пользователь только что сделал валидное действие).
+        """
+        if self._error_timer is not None:
+            self._error_timer.stop()
+        self._error_active = False
+        self._last_info_text = text
         self.center_label.setText(text)
+        self.center_label.setStyleSheet("color: white; font-size: 12px;")
+
+    def set_error_text(self, text: str, duration_ms: int = 5000):
+        """Показать сообщение об ошибке в чёрном поле на duration_ms.
+
+        Через duration_ms восстанавливается последний валидный текст.
+        Повторный вызов перезапускает таймер (старый отменяется).
+        """
+        if self._error_timer is not None:
+            self._error_timer.stop()
+
+        self._error_active = True
+        self.center_label.setText(text)
+        self.center_label.setStyleSheet(
+            "color: #ff6b6b; font-size: 12px; font-weight: bold;"
+        )
+
+        self._error_timer = QTimer(self)
+        self._error_timer.setSingleShot(True)
+        self._error_timer.timeout.connect(self._restore_after_error)
+        self._error_timer.start(duration_ms)
+
+    def _restore_after_error(self):
+        """Восстановить последний валидный текст после сообщения об ошибке."""
+        self._error_active = False
+        self.center_label.setText(self._last_info_text)
+        self.center_label.setStyleSheet("color: white; font-size: 12px;")
 
     def set_info_blink_phase(self, phase: float):
-        """Установить фазу мигания текста в чёрном поле (0.0 … 1.0)."""
+        """Мигание центральной метки чёрного поля (0.0 … 1.0).
+
+        Пока активна ошибка — стиль не трогаем (иначе blink затирает красный).
+        """
+        if self._error_active:
+            return
         alpha = lerp_alpha(phase, LABEL_ALPHA_DIM, LABEL_ALPHA_BRIGHT)
         self.center_label.setStyleSheet(
             f"color: rgba(255, 255, 255, {alpha}); font-size: 12px;"
         )
-    def set_left_text(self, text: str):
-        """Установить текст в левой части (для сообщения ← назад)"""
-        if text:
-            self.left_label.setText(text)
-            self.left_label.show()
-        else:
-            self.left_label.hide()
-            self.left_label.setText("")
-
-    def set_right_text(self, text: str):
-        """Установить текст в правой части (для сообщения информация →)"""
-        if text:
-            self.right_label.setText(text)
-            self.right_label.show()
-        else:
-            self.right_label.hide()
-            self.right_label.setText("")
-
-    def clear_side_texts(self):
-        """Очистить боковые тексты (при обычных сообщениях)"""
-        self.left_label.hide()
-        self.right_label.hide()
-        self.left_label.setText("")
-        self.right_label.setText("")
-
-    
-    # ─────────────────────────────────────────
-    # Управление режимом RECORDING (чёрное поле)
-    # ─────────────────────────────────────────
-
-    def set_recording_video_mode(self):
-        """
-        Режим записи VIDEO:
-        Левый блок: "запись ..."
-        Правый блок: "TIME: 00:00:00"
-        """
-        # Очищаем центр (там ничего не нужно)
-        self.center_label.setText("")
-        
-        # Показываем левый и правый блоки
-        self.left_label.show()
-        self.right_label.show()
-        
-        # Устанавливаем стили
-        self.left_label.setStyleSheet("color: #8B0000; font-size: 15px;")
-        self.right_label.setStyleSheet("color: white; font-size: 12px; padding-top: 2px;")
-        
-        # Начальные значения (обновляются через update_* методы)
-        self.left_label.setText("запись")
-        self.right_label.setText("TIME: 00:00:00")
-
-    def set_recording_screen_mode(self):
-        """
-        Режим записи SCREEN:
-        Левый блок: "0 SHOTS"
-        Центр: "запись ..."
-        Правый блок: "TIME: 00:00:00"
-        """
-        # Показываем все три блока
-        self.left_label.show()
-        self.center_label.show()
-        self.right_label.show()
-        
-        # Устанавливаем стили
-        self.left_label.setStyleSheet("color: #C0C0C0; font-size: 14px;")
-        self.center_label.setStyleSheet("color: #8B0000; font-size: 14px;")
-        self.right_label.setStyleSheet("color: white; font-size: 13px; padding-top: 2px;")
-        
-        # Начальные значения
-        self.left_label.setText("0 SHOTS")
-        self.center_label.setText("запись")
-        self.right_label.setText("TIME: 00:00:00")
-
-    def set_recording_idle_mode(self):
-        """
-        Вернуть чёрное поле в режим PREPARING (для подсказок)
-        """
-        # Скрываем боковые блоки
-        self.left_label.hide()
-        self.right_label.hide()
-        
-        # Центр будет заполняться через set_info_text
-        self.center_label.show()
-        self.center_label.setText("")  # очищаем на всякий случай
-
-    # Обновление значений во время записи
-    def update_recording_time(self, time_text: str):
-        """Обновить таймер в правом блоке"""
-        self.right_label.setText(time_text)
 
     def update_recording_shots(self, shots_text: str):
-        """Обновить счётчик SHOTS в левом блоке (для screen)"""
+        """Обновить левую метку (SHOTS для screen)."""
         self.left_label.setText(shots_text)
 
-    def update_recording_dots(self, dots_text: str):
-        """Обновить анимацию точек в слове 'запись'"""
-        # Для VIDEO — левый блок, для SCREEN — центр
-        if self.left_label.isVisible() and "запись" in self.left_label.text():
-            self.left_label.setText(dots_text)
-        elif self.center_label.isVisible() and "запись" in self.center_label.text():
-            self.center_label.setText(dots_text)
+    # ─────────────────────────────────────────
+    # Нижняя панель — инфо
+    # ─────────────────────────────────────────
+
+    def set_status_labels(self, text_1: str, text_2: str):
+        """Обновить две метки над таймером."""
+        self.status_label_1.setText(text_1)
+        self.status_label_2.setText(text_2)
+
+    def update_recording_time(self, time_text: str):
+        """Обновить таймер. Принимает текст с префиксом TIME: или без."""
+        text = time_text.strip()
+        if not text.startswith("TIME:"):
+            text = f"TIME: {text}"
+        self.timer_label.setText(text)
+
+    # ─────────────────────────────────────────
+    # Сброс
+    # ─────────────────────────────────────────
 
     def reset_recording_mode(self):
-        """Сброс перед переходом в REVIEW (очищаем всё)"""
+        """Сбросить панель в исходное состояние."""
+        self.info_stack.setCurrentIndex(0)
         self.left_label.setText("")
-        self.right_label.setText("")
         self.center_label.setText("")
-        self.left_label.hide()
-        self.right_label.hide()
-        self.center_label.show()
+        self.right_label.setText("")
+        self.status_label_1.setText("")
+        self.status_label_2.setText("")
+        self.timer_label.setText("00:00:00")
+        self.red_dot.stop()

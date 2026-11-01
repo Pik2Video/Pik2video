@@ -94,6 +94,22 @@ class SessionStorage:
         logger.warning(f"Видеофайл не найден в {self.session_dir}")
         return None
 
+    def get_audio_path(self) -> Optional[Path]:
+        """Возвращает путь к аудиофайлу в сессии (для AUDIO-сессии)."""
+        if not self.has_active_session():
+            return None
+
+        audio_extensions = ['.wav', '.m4a', '.aiff', '.aif']           # поддерживаемые аудио-форматы
+
+        for item in self.session_dir.iterdir():
+            if item.is_file() and item.suffix.lower() in audio_extensions:
+                if item.stat().st_size > 0:                            # файл не пустой
+                    logger.debug(f"Найден аудиофайл: {item}")
+                    return item
+
+        logger.warning(f"Аудиофайл не найден в {self.session_dir}")
+        return None
+
     def get_frame_count(self) -> int:
         """Возвращает количество захваченных кадров (для screen режима)"""
         if not self.has_active_session():

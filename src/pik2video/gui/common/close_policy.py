@@ -27,6 +27,21 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Callable, Optional
 
+
+# ────────────────────────── DEV-РЕЖИМ ──────────────────────────
+
+_dev_mode = False
+
+def set_dev_mode(enabled: bool):
+    """Включить/выключить dev-режим: закрытие окон без подтверждений."""
+    global _dev_mode
+    _dev_mode = bool(enabled)
+
+
+def is_dev_mode() -> bool:
+    return _dev_mode
+
+
 # ─────────────────────────────────────────────────────────
 #                      СЦЕНАРИИ
 # ─────────────────────────────────────────────────────────
@@ -175,6 +190,11 @@ def evaluate_close(
     не закрываем.
     """
     rule = RULES[policy]
+
+    # В dev-режиме закрываем окно без вопросов
+    if _dev_mode:
+        return CloseAction.CLOSE
+
 
     # ── ALLOW ──
     if policy == ClosePolicy.ALLOW:

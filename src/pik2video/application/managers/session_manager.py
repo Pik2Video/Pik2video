@@ -62,7 +62,13 @@ class SessionManager(QObject):
         """Путь к файлу в текущей сессии."""
         return self._session_service.get_video_path()
 
-    
+    def get_audio_path(self):
+        """Путь к аудиофайлу в текущей сессии."""
+        return self._session_service.get_audio_path()
+
+    def get_session_dir(self):
+        """Путь к папке текущей сессии (или None)."""
+        return self._session_service.storage.session_dir                  # прямой доступ к session_dir
 
     # ---------- Runtime-данные ----------
 
@@ -90,6 +96,10 @@ class SessionManager(QObject):
 
     def get_region(self) -> Optional[dict]:
         return self.region
+
+    def has_audio_track(self) -> bool:
+        """Есть ли в текущей сессии аудиодорожка."""
+        return self.get_audio_path() is not None                      # True если аудиофайл найден
 
     def set_start_time(self, start_time: float):
         self._start_time = start_time

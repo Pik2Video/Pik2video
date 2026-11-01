@@ -11,6 +11,29 @@ class CleanSpinBox(QSpinBox):
         self.lineEdit().selectAll()
 
 
+class NullableSpinBox(QSpinBox):
+    """SpinBox с "None" при value=0.
+
+    При фокусе — пустое поле с курсором (без "None").
+    При потере фокуса без ввода — "None" возвращается.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setSpecialValueText("None")
+        self.setButtonSymbols(QSpinBox.NoButtons)
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        if self.value() == 0:
+            self.lineEdit().clear()
+
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        if self.value() == 0:
+            self.lineEdit().setText(self.specialValueText())
+
+
 # ──────── Capture Per Minute Input ────────
 class CapturePerMinuteInput(QWidget):
     """

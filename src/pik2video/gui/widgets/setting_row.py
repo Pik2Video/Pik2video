@@ -1,62 +1,69 @@
 # src/pik2video/gui/widgets/setting_row.py
 
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QSpacerItem, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QWidget
+
+
+CONTROL_COLUMN_WIDTH = 240   # ширина правой колонки (контрол центр)
+
+
+class DashedLine(QWidget):
+    """Тонкая пунктирная линия между текстом и контролом."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(20)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        pen = QPen(QColor("#555"), 1, Qt.DashLine)
+        pen.setDashPattern([3, 4])
+        painter.setPen(pen)
+        y = self.height() // 2
+        painter.drawLine(0, y, self.width(), y)
 
 
 class SettingRow(QWidget):
-    """
-    Универсальная строка настройки:
-    Слева текст (label), справа любой виджет управления (control).
-    Автоматически учитывает внутренние отступы и фиксированные размеры для стабильного отображения.
-    """
+    """Строка: текст (слева) — пунктир — контрол (в колонке 240, выравнивание задаётся)."""
 
-    def __init__(self, text: str, control: QWidget):
+    def __init__(self, text: str, control: QWidget, align=Qt.AlignCenter):
         super().__init__()
-
-        # ───────── Layout ─────────
-        layout = QHBoxLayout(self)  
-        # Горизонтальный layout для label + control
-        # Этот layout управляет расположением элементов в строке
-
-        layout.setContentsMargins(8, 4, 4, 4)  
-        # Отступы ВНУТРИ строки (слева, сверху, справа, снизу)
-        # Эти значения делают пространство между краем строки и содержимым
-
-        layout.setSpacing(8)  
-        # Расстояние между label и control
-        # Можно подправить, если элементы будут слишком близко или далеко
-
-        # ───────── Label ─────────
-        self.label = QLabel(text)  
-        # Текст слева, описывающий настройку
-
-        self.label.setFixedWidth(200)  
-        # Фиксированная ширина текста
-        # Стабилизирует отображение строк в разных окнах
-
-        # ───────── Добавляем элементы в layout ─────────
-        layout.addWidget(self.label)  
-        # Добавляем текст слева
-
-        # ───────── "Пружина" с минимальной шириной ─────────
-        spacer = QSpacerItem(
-            41,  # минимальная ширина пружины
-            0,   # высота не важна для горизонтального layout
-            QSizePolicy.Expanding,  # может растягиваться
-            QSizePolicy.Minimum
+        self.setObjectName("settingRow")
+        self.setStyleSheet(
+            "QWidget#settingRow { background: transparent; border: none; }"
         )
-        layout.addItem(spacer)
-        layout.addWidget(control)  
-        # Добавляем виджет управления справа
-        # Так как мы убрали addStretch(), ширина строки зависит от label+control+spacing+margins
 
-        # ───────── Сохраняем control ─────────
-        self.control = control  
-        # Сохраняем ссылку на виджет, чтобы к нему можно было обращаться извне
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(8)
+
+        self.label = QLabel(text)
+        self.label.setStyleSheet(
+            "background: transparent; border: none; "
+            "color: #ddd; font-size: 12px;"
+        )
+        self.label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        layout.addWidget(self.label, stretch=0)
+
+        self.dashed_line = DashedLine()
+        layout.addWidget(self.dashed_line, stretch=1)
+
+        ctrl_container = QWidget()
+        ctrl_container.setObjectName("ctrlContainer")
+        ctrl_container.setStyleSheet(
+            "QWidget#ctrlContainer { background: transparent; border: none; }"
+        )
+        ctrl_container.setFixedWidth(CONTROL_COLUMN_WIDTH)
+        ctrl_layout = QHBoxLayout(ctrl_container)
+        ctrl_layout.setContentsMargins(0, 0, 0, 0)
+        ctrl_layout.setAlignment(align)
+        ctrl_layout.addWidget(control)
+        layout.addWidget(ctrl_container, stretch=0)
+
+        self.control = control
 
     def setText(self, text: str):
-        """Обновить текст настройки"""
         if hasattr(self, 'label'):
             self.label.setText(text)
-        else:
-            print("[ERROR] SettingRow: label не существует!")

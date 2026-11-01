@@ -10,6 +10,28 @@ from .settings_model import SettingsModel
 
 logger = logging.getLogger(__name__)
 
+
+# UI "качество" → целевой bitrate. quality=0 — используем только bitrate (videotoolbox).
+QUALITY_BITRATE = {
+    "Низкое": 2000,
+    "Среднее": 8000,
+    "Высокое": 20000,
+}
+
+
+class Pik2VideoParams(ctypes.Structure):
+    _fields_ = [
+        ("output_dir", ctypes.c_char_p),
+        ("left", ctypes.c_int),
+        ("top", ctypes.c_int),
+        ("width", ctypes.c_int),
+        ("height", ctypes.c_int),
+        ("fps", ctypes.c_int),
+        ("bitrate_kbps", ctypes.c_int),
+        ("quality", ctypes.c_int),
+    ]
+
+
 class RecordingService:
     """
     Сервис записи, использующий C++ движок вместо старого Python кода.
@@ -44,14 +66,7 @@ class RecordingService:
             return
 
         try:
-            self._cpp_lib.recorder_start.argtypes = [
-                ctypes.c_char_p,   # const char* output_dir
-                ctypes.c_int,      # int left
-                ctypes.c_int,      # int top
-                ctypes.c_int,      # int width
-                ctypes.c_int,      # int height
-                ctypes.c_int,      # int fps
-            ]
+            self._cpp_lib.recorder_start.argtypes = [ctypes.POINTER(Pik2VideoParams)]
             self._cpp_lib.recorder_start.restype = ctypes.c_int
 
             self._cpp_lib.recorder_stop.argtypes = []
@@ -96,16 +111,45 @@ class RecordingService:
         else:
             fps = self._settings.screen.capture_fps
         
-        output_dir = str(session_dir).encode('utf-8')
-        logger.info(f"Запуск C++ записи: {session_dir}, {width}x{height}, {fps} FPS (масштаб {scale})")
-        result = self._cpp_lib.recorder_start(output_dir, left, top, width, height, fps)
-        
-        if result == 0:
-            self._is_recording = True
-            return True
-        else:
+        quality_name = self._settings.record.common.quality
+        bitrate_kbps = QUALITY_BITRATE.get(quality_name, 8000)
+
+        params = Pik2VideoParams()
+        params.output_dir = str(session_dir).encode('utf-8')
+        params.left = left
+        params.top = top
+        params.width = width
+        params.height = height
+        params.fps = fps
+        params.bitrate_kbps = bitrate_kbps
+        params.quality = 0   # используем только bitrate
+        logger.info(
+            f"Запуск C++ записи: {session_dir}, {width}x{height}, {fps} FPS, "
+            f"качество='{quality_name}' → {bitrate_kbps} kbps (масштаб {scale})"
+        )
+        result = self._cpp_lib.recorder_start(ctypes.byref(params))
+
+        if result != 0:
             logger.error(f"Ошибка запуска записи: {result}")
             return False
+
+        # Ждём фактического захвата первого кадра в C++.
+        # init_output + VideoInput::open + init_filters занимают ~0.5 сек,
+        # clock_.start() вызывается только после этого.
+        import time as _time
+        deadline = _time.monotonic() + 2.0
+        started = False
+        while _time.monotonic() < deadline:
+            if self._cpp_lib.recorder_get_elapsed_time() > 0:
+                started = True
+                break
+            _time.sleep(0.01)
+
+        if not started:
+            logger.warning("C++ recorder не стартовал за 2 сек")
+
+        self._is_recording = True
+        return True
 
     def stop_recording(self) -> bool:
         if not self._is_recording:

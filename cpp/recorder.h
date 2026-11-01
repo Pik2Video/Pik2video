@@ -2,12 +2,13 @@
 #ifndef RECORDER_H
 #define RECORDER_H
 
+#include "pik2video/params.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Функции, вызываемые из Python (через ctypes)
-int  recorder_start(const char* output_dir, int left, int top, int width, int height, int fps);
+int  recorder_start(const Pik2VideoParams* params);
 void recorder_stop();
 double recorder_get_elapsed_time();
 int  recorder_get_frame_count();
