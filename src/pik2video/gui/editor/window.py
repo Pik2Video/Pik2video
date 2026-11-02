@@ -108,7 +108,8 @@ class EditorWindow(QMainWindow):
         self._startup_done = False                                   # флаг: начальная инициализация закончена
         self._prev_had_both = False                                  # было ли оба файла в прошлой проверке
         self._was_playing_before_drag = False                        # играл ли плеер до начала drag метки
-        self._last_preview_seek_ms = 0                               # throttle для setPosition при drag
+        self._last_preview_seek_ms = 0                               # throttle для превью-кадра при drag
+        self._last_seek_ms = 0                                       # throttle для основного плеера при drag
         self._last_scrub_seconds = 0.0                               # финальная позиция после скраба
         self._drag_start_offset = 0.0                                # offset на момент начала drag дорожки
         self._current_dragged_offset = 0.0                           # текущий offset в процессе drag
@@ -219,7 +220,7 @@ class EditorWindow(QMainWindow):
         mx_layout.addWidget(self.multiplexer, stretch=1)
 
         # ── Зона таймлайнов с общим ползунком ──
-        self.timeline = NewTimeline(self.state)
+        self.timeline = NewTimeline(self.state, thumbnail_loader=self._thumbnail_loader)
         self.timeline.seek_requested.connect(self.multiplexer.set_position)
         
 
@@ -301,9 +302,10 @@ class EditorWindow(QMainWindow):
 #         self.timeline.trim_changed.connect(self._on_video_trim_committed) # ОТКЛЮЧЕНО (старый таймлайн)
 
 #         self.timeline.seek_requested.connect(self.multiplexer.set_position)        # клик по полосе → разовый seek # ОТКЛЮЧЕНО (старый таймлайн)
-#         self.timeline.scrub_started.connect(self._on_scrub_started)                # начало drag → пауза плеера # ОТКЛЮЧЕНО (старый таймлайн)
-#         self.timeline.scrub_dragged.connect(self._on_scrub_dragged)                # drag → превью кадра # ОТКЛЮЧЕНО (старый таймлайн)
-#         self.timeline.scrub_finished.connect(self._on_scrub_finished)              # конец drag → возобновление # ОТКЛЮЧЕНО (старый таймлайн)
+        self.timeline.playhead_drag_started.connect(self._on_scrub_started)
+        self.timeline.playhead_dragged.connect(self._on_scrub_dragged)
+        self.timeline.playhead_drag_finished.connect(self._on_scrub_finished)
+        self.timeline.active_changed.connect(self._on_timeline_active_changed)
 
 #         self.timeline.marker_drag_started.connect(self._on_marker_drag_started) # ОТКЛЮЧЕНО (старый таймлайн)
 #         self.timeline.marker_dragged.connect(self._on_marker_dragged) # ОТКЛЮЧЕНО (старый таймлайн)
@@ -666,24 +668,39 @@ class EditorWindow(QMainWindow):
         self.drop_area.set_link_enabled(has_both)
 
 
+    def _on_timeline_active_changed(self, kind: str, index: int):
+        """Клик по иконке дорожки в таймлайне."""
+        if kind == "video":
+            self.state.set_active_video(index)
+        elif kind == "audio":
+            self._on_audio_clicked()
+
     def _on_scrub_started(self):
         """Начало drag по скрабберу: пауза плеера + кэш кадров."""
         self._was_playing_before_drag = self.multiplexer.begin_trim_drag()
         self.multiplexer.set_keep_frames(True)
-        self._last_scrub_seconds = 0.0
+        # Если drag не случится (клик без движения) — позиция не должна меняться
+        self._last_scrub_seconds = self.multiplexer.get_position()
 
     def _on_scrub_dragged(self, seconds: float, x_local: int):
-        """Drag по скрабберу: throttled seek для превью + показ кадра."""
+        """Drag playhead: throttled seek плеера + превью кадра."""
         self._last_scrub_seconds = seconds
+
+        # Основной плеер — throttle 100 мс
         now_ms = int(time.time() * 1000)
-        if now_ms - self._last_preview_seek_ms >= 200:                # throttle 200 мс (5 fps)
+        if now_ms - self._last_seek_ms >= 100:
+            self.multiplexer.set_position(seconds)
+            self._last_seek_ms = now_ms
+
+        # Превью-кадра — throttle 200 мс
+        if now_ms - self._last_preview_seek_ms >= 200:
             self.multiplexer.seek_for_preview(seconds)
             self._last_preview_seek_ms = now_ms
 
         pixmap = self.multiplexer.get_last_frame()
         if pixmap is None:
             return
-        global_pos = self.timeline.seek_bar.mapToGlobal(QPoint(x_local, 0))
+        global_pos = self.timeline.mapToGlobal(QPoint(x_local, 0))
         self._frame_preview.show_frame(pixmap, global_pos.x(), global_pos.y())
 
     def _on_scrub_finished(self):
@@ -827,6 +844,7 @@ class EditorWindow(QMainWindow):
         """EditorState сообщил, что активный файл сменился."""
         self.drop_area.set_video_active(self.state.get_active_index())
         self._sync_export_name_field()
+        self.timeline.set_active_video(self.state.get_active_index())
 
     def load_file(self, path: str, preferred_name: str = "") -> bool:
         """Загрузить файл в редактор извне. Возвращает True при успехе.

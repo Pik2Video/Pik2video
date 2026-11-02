@@ -49,10 +49,36 @@ class _ThumbnailTask(QRunnable):
             self._on_done(self._source_path)                     # сообщаем UI: «готово»
 
 
+class _FramesTask(QRunnable):
+    """Задача в пуле потоков: сгенерировать N кадров для дорожки таймлайна."""
+
+    def __init__(self, cache: ThumbnailCache, source_path: str,
+                 count: int, duration: float, on_done):
+        super().__init__()
+        self._cache = cache
+        self._source_path = source_path
+        self._count = count
+        self._duration = duration
+        self._on_done = on_done
+        self.setAutoDelete(True)
+
+    def run(self):
+        try:
+            if not self._cache.has_frames(self._source_path, self._count):
+                self._cache.generate_frames(
+                    self._source_path, self._count, self._duration
+                )
+        except Exception as e:
+            logger.warning(f"Ошибка фоновой генерации кадров {self._source_path}: {e}")
+        finally:
+            self._on_done(self._source_path, self._count)
+
+
 class ThumbnailLoader(QObject):
     """Пул задач генерации миниатюр + сигнал готовности."""
 
     thumbnail_ready = Signal(str)               # путь исходного файла
+    frames_ready = Signal(str, int)             # путь файла, число кадров
 
     def __init__(self, cache: ThumbnailCache, parent=None):
         super().__init__(parent)
@@ -60,6 +86,7 @@ class ThumbnailLoader(QObject):
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(MAX_PARALLEL)
         self._in_progress: set = set()          # пути, для которых задача уже стоит
+        self._frames_in_progress: set = set()   # (путь, count) кадров в очереди
 
     def get_cached_pixmap(self, source_path: str):
         """Загрузить готовую миниатюру из кэша. Только из UI-потока."""
@@ -82,11 +109,38 @@ class ThumbnailLoader(QObject):
         task = _ThumbnailTask(self._cache, source_path, self._on_task_done)
         self._pool.start(task)
 
+    def get_cached_frames(self, source_path: str, count: int):
+        """Загрузить готовые кадры из кэша. Только из UI-потока.
+        Возвращает пустой список, если кадров ещё нет.
+        """
+        return self._cache.get_frame_pixmaps(source_path, count)
+
+    def request_frames(self, source_path: str, count: int, duration: float):
+        """Поставить задачу на генерацию кадров. Если кэш есть — сигнал сразу."""
+        if not source_path or count <= 0 or duration <= 0:
+            return
+
+        key = (source_path, count)
+        if self._cache.has_frames(source_path, count):
+            self.frames_ready.emit(source_path, count)
+            return
+
+        if key in self._frames_in_progress:
+            return
+
+        self._frames_in_progress.add(key)
+        logger.debug(f"Задача генерации кадров: {source_path} ({count} шт.)")
+        task = _FramesTask(
+            self._cache, source_path, count, duration, self._on_frames_done
+        )
+        self._pool.start(task)
+
     def cancel_all(self):
         """Прервать все ожидающие задачи (вызывается при закрытии)."""
-        self._pool.clear()                                      # снять из очереди то, что ещё не запустилось
-        self._pool.waitForDone(1000)                            # дождаться активных (максимум секунда)
+        self._pool.clear()
+        self._pool.waitForDone(1000)
         self._in_progress.clear()
+        self._frames_in_progress.clear()
 
     # ── Внутреннее ──
 
@@ -94,3 +148,7 @@ class ThumbnailLoader(QObject):
         """Срабатывает из фонового потока — только эмитим сигнал."""
         self._in_progress.discard(source_path)
         self.thumbnail_ready.emit(source_path)
+
+    def _on_frames_done(self, source_path: str, count: int):
+        self._frames_in_progress.discard((source_path, count))
+        self.frames_ready.emit(source_path, count)

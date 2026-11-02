@@ -28,7 +28,8 @@ from PySide6.QtGui import QPixmap
 logger = logging.getLogger(__name__)
 
 FFMPEG_BIN = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
-THUMB_SIZE = 128                  # длинная сторона миниатюры в пикселях
+THUMB_SIZE = 128                  # длинная сторона миниатюры в пикселях (для иконки файла)
+FRAME_SIZE = 96                   # сторона кадра на дорожке таймлайна (квадрат)
 THUMBNAIL_SEEK = 1.0              # секунда, с которой брать кадр
 GENERATION_TIMEOUT = 10           # таймаут ffmpeg в секундах
 
@@ -166,6 +167,113 @@ class ThumbnailCache:
             return False
         except Exception as e:
             logger.warning(f"Ошибка генерации миниатюры для {source_path}: {e}")
+            return False
+
+    # ── Кадры для дорожки таймлайна (N кадров на видео) ──
+
+    def _frames_dir(self, source_path: str) -> Path:
+        """Папка для кадров этого видео (по ключу кэша)."""
+        return self._cache_dir / f"{self._cache_key(source_path)}_frames"
+
+    def frame_paths(self, source_path: str, count: int) -> list:
+        """Список путей к файлам кадров (могут ещё не существовать).
+
+        ffmpeg нумерует с frame_0001.png — учитываем это.
+        """
+        d = self._frames_dir(source_path)
+        return [d / f"frame_{i:04d}.png" for i in range(1, count + 1)]
+
+    def has_frames(self, source_path: str, count: int) -> bool:
+        """Все ли N кадров уже в кэше.
+
+        Допуск -1: ffmpeg при -vframes N иногда создаёт N-1 кадров из-за
+        округления fps. Это не ошибка — для отрисовки хватит и N-1.
+        """
+        d = self._frames_dir(source_path)
+        existing = len(list(d.glob("frame_*.png")))
+        return existing >= count - 1
+
+    def get_frame_pixmaps(self, source_path: str, count: int) -> list:
+        """Загрузить готовые кадры из кэша. Только из UI-потока.
+
+        Возвращает список pixmap (может быть count-1 из-за округления fps).
+        Пустой список — если кадров существенно меньше ожидаемого.
+        """
+        d = self._frames_dir(source_path)
+        files = sorted(d.glob("frame_*.png"))
+        if len(files) < count - 1:
+            return []
+        pixmaps = []
+        for p in files[:count]:
+            pm = QPixmap(str(p))
+            if pm.isNull():
+                return []
+            pixmaps.append(pm)
+        return pixmaps
+
+    def generate_frames(self, source_path: str, count: int, duration: float) -> bool:
+        """Сгенерировать N кадров через ffmpeg. Вызывается из фонового потока.
+
+        Использует фильтр fps=count/duration — ffmpeg равномерно сэмплирует
+        нужное количество кадров по всей длине видео.
+        """
+        source = Path(source_path)
+        if not source.exists():
+            logger.warning(f"Исходный файл не найден: {source_path}")
+            return False
+        if duration <= 0 or count <= 0:
+            return False
+        if self.has_frames(source_path, count):
+            return True
+
+        self._enforce_size_limit()
+
+        d = self._frames_dir(source_path)
+        d.mkdir(parents=True, exist_ok=True)
+
+        # Удаляем старые кадры (если count менялся или файл перезаписан)
+        for old in d.glob("frame_*.png"):
+            try:
+                old.unlink()
+            except OSError:
+                pass
+
+        fps = count / duration
+
+        try:
+            result = subprocess.run(
+                [
+                    FFMPEG_BIN,
+                    "-loglevel", "quiet",
+                    "-i", source_path,
+                    "-vf", (
+                        f"fps={fps:.6f},"
+                        f"scale={FRAME_SIZE}:{FRAME_SIZE}:force_original_aspect_ratio=decrease,"
+                        f"pad={FRAME_SIZE}:{FRAME_SIZE}:(ow-iw)/2:(oh-ih)/2:black"
+                    ),
+                    "-vframes", str(count),
+                    "-y",
+                    str(d / "frame_%04d.png"),
+                ],
+                capture_output=True,
+                check=False,
+                timeout=GENERATION_TIMEOUT * 3,
+            )
+
+            if result.returncode != 0:
+                logger.warning(
+                    f"ffmpeg не смог сгенерировать кадры для {source_path}: "
+                    f"{result.stderr.decode(errors='ignore')[:200]}"
+                )
+                return False
+
+            return self.has_frames(source_path, count)
+
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Таймаут генерации кадров: {source_path}")
+            return False
+        except Exception as e:
+            logger.warning(f"Ошибка генерации кадров для {source_path}: {e}")
             return False
 
     def clear(self):
