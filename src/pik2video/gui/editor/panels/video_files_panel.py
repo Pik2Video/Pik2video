@@ -79,21 +79,28 @@ class VideoFilesPanel(QFrame):
         self._apply_style()
 
     def _apply_style(self):
+        # Логика: рамка зоны зависит от наличия файлов и состояния.
+        # Пустая зона — без рамки (только заглушка 📹 на фоне).
         if not self._items:
-            bg, border = BG_NORMAL, BORDER_NORMAL
+            bg = BG_NORMAL
+            border_css = "none"
         elif self._is_active_zone:
-            bg, border = "#3a3a3a", "#8a6f2a"
+            bg = "#3a3a3a"
+            border_css = "2px solid #8a6f2a"
         elif self._is_dimmed:
-            bg, border = "#1a1a1a", "#2a2a2a"
+            bg = "#1a1a1a"
+            border_css = "1px solid #2a2a2a"
         elif self._is_hovered:
-            bg, border = BG_HOVER, BORDER_HOVER
+            bg = BG_HOVER
+            border_css = "2px dashed #7a7a7a"
         else:
-            bg, border = BG_NORMAL, BORDER_NORMAL
+            bg = BG_NORMAL
+            border_css = "1px solid #555555"
 
         self.setStyleSheet(f"""
             VideoFilesPanel {{
                 background-color: {bg};
-                border: 2px dashed {border};
+                border: {border_css};
                 border-radius: 6px;
             }}
         """)

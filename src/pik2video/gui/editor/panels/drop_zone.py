@@ -64,26 +64,28 @@ class DropZone(QFrame):
         self._apply_style()
 
     def _apply_style(self):
+        # Логика: рамка зоны зависит от наличия файла и состояния.
+        # Пустая зона — без рамки (только иконка на фоне).
         if not self._has_file:
             bg = BG_NORMAL
-            border = BORDER_NORMAL
+            border_css = "none"
         elif self._is_active:
             bg = "#3a3a3a"
-            border = "#8a6f2a"
+            border_css = "2px solid #8a6f2a"
         elif self._is_dimmed:
             bg = "#1a1a1a"
-            border = "#2a2a2a"
+            border_css = "1px solid #2a2a2a"
         elif self._is_hovered:
             bg = BG_HOVER
-            border = BORDER_HOVER
+            border_css = "2px dashed #7a7a7a"
         else:
             bg = BG_NORMAL
-            border = BORDER_NORMAL
+            border_css = "1px solid #555555"
 
         self.setStyleSheet(f"""
             DropZone {{
                 background-color: {bg};
-                border: 2px dashed {border};
+                border: {border_css};
                 border-radius: 6px;
             }}
         """)

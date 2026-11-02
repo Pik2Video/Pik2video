@@ -27,6 +27,7 @@ MAX_BYTES = 10 * 1024 * 1024   # 10 МБ на файл
 BACKUP_COUNT = 10              # хранить 10 старых файлов
 
 NOISY_LOGGERS = (
+    # Сторонние библиотеки
     "PySide6",
     "PIL",
     "urllib3",
@@ -38,6 +39,14 @@ NOISY_LOGGERS = (
     "Quartz",
     "Foundation",
     "CoreFoundation",
+    # Инициализация приложения (шумно при старте, пользы — ноль)
+    "application.settings_model",
+    "managers.settings_manager",
+    "locale.translator",
+    "ffmpeg.ffmpeg_service",
+    "managers.ffmpeg_manager",
+    "application.recording_service",
+    "storage.thumbnail_cache",
 )
 
 

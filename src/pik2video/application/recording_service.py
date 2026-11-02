@@ -48,9 +48,6 @@ class RecordingService:
         base_path = Path(__file__).resolve().parents[3]
         lib_path = base_path / "cpp" / "build" / "libpik2video_recorder.dylib"
 
-        print(f"[C++] Ищу библиотеку: {lib_path}")
-        print(f"[C++] Существует: {lib_path.exists()}")
-
         if not lib_path.exists():
             logger.error(f"Библиотека не найдена: {lib_path}")
             self._cpp_lib = None
@@ -58,9 +55,7 @@ class RecordingService:
 
         try:
             self._cpp_lib = ctypes.CDLL(str(lib_path))
-            print("[C++] Библиотека загружена")
         except OSError as e:
-            print(f"[C++] Ошибка загрузки: {e}")
             logger.error(f"Ошибка загрузки C++ библиотеки: {e}")
             self._cpp_lib = None
             return
@@ -78,10 +73,8 @@ class RecordingService:
             self._cpp_lib.recorder_get_frame_count.argtypes = []
             self._cpp_lib.recorder_get_frame_count.restype = ctypes.c_int
 
-            print("[C++] Символы привязаны")
-            logger.info("C++ библиотека загружена успешно")
+            logger.debug("C++ библиотека загружена успешно")
         except AttributeError as e:
-            print(f"[C++] Символ не найден: {e}")
             logger.error(f"Символ C++ не найден: {e}")
             self._cpp_lib = None
 

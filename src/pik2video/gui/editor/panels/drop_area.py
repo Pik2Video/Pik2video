@@ -15,7 +15,6 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from .drop_zone import DropZone
-from .link_button import LinkButton
 from .video_files_panel import VideoFilesPanel
 
 logger = logging.getLogger(__name__)
@@ -62,10 +61,6 @@ class DropArea(QWidget):
         self.drop_video.delete_requested.connect(self.video_delete_requested.emit)
         layout.addWidget(self.drop_video, stretch=DROP_VIDEO_RATIO)
 
-        self.link_button = LinkButton(linked=True)
-        self.link_button.state_toggled.connect(self.link_toggled.emit)
-        layout.addWidget(self.link_button, stretch=0)
-
         self.drop_audio = DropZone(
             icon="🎵",
             label="mp3",
@@ -92,28 +87,24 @@ class DropArea(QWidget):
         self.drop_audio.show_empty(icon="🎵", label="mp3")
 
     def set_linked(self, value: bool):
-        """Обновить визуальное состояние кнопки связки."""
-        self.link_button.set_linked(value)
+        """Устаревший метод (связка удалена). Оставлен для совместимости с window.py."""
+        pass
 
     def set_link_enabled(self, enabled: bool):
-        """Включить/выключить кнопку связки (нужны оба файла)."""
-        self.link_button.setEnabled(enabled)
+        """Устаревший метод (связка удалена). Оставлен для совместимости с window.py."""
+        pass
 
-    def update_highlight(self, mode: str, linked: bool):
-        """Подсветка зон по режиму и связке."""
-        if linked:
-            # обе зоны «включены»
-            self.drop_video.set_active_zone(True)
-            self.drop_audio.set_active(True)
-            self.drop_video.set_dimmed(False)
-            self.drop_audio.set_dimmed(False)
-        else:
-            video_active = (mode == "video")
-            audio_active = (mode == "audio")
-            self.drop_video.set_active_zone(video_active)
-            self.drop_audio.set_active(audio_active)
-            self.drop_video.set_dimmed(not video_active)
-            self.drop_audio.set_dimmed(not audio_active)
+    def update_highlight(self, mode: str, linked: bool = True):
+        """Подсветка зон по режиму (linked игнорируется — связка удалена).
+
+        Активна ровно одна зона: видео при mode="video", аудио при mode="audio".
+        """
+        video_active = (mode == "video")
+        audio_active = (mode == "audio")
+        self.drop_video.set_active_zone(video_active)
+        self.drop_audio.set_active(audio_active)
+        self.drop_video.set_dimmed(not video_active)
+        self.drop_audio.set_dimmed(not audio_active)
 
     def set_audio_active(self, active: bool):
         """Подсветить/снять подсветку аудио-зоны (режим плеера audio)."""

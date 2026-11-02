@@ -48,6 +48,7 @@ from .player import PlayerWidget
 from .record_menu import RecordMenuController
 from .state import EditorState
 from .timeline import TimelineWidget as NewTimeline, FramePreview
+from .timeline.marker_menu import MarkerMenu
 from .thumbnail_loader import ThumbnailLoader
 from .panels import ToolsPanel
 from .panels import TopBar
@@ -105,6 +106,9 @@ class EditorWindow(QMainWindow):
         # ── Контроллеры (после _build_ui — им нужен top_bar) ──
         self._export_saved_path = None                              # путь к файлу, который был в плеере до экспорта
         self._marker_mode_active = False                             # режим сдвига рамки (перо/маркер)
+        self._active_kind = "video"                                  # какой файл активен: "video" | "audio"
+        self._marker_menu = None                                     # всплывающее меню инструментов метки
+        self._active_tool = None                                     # текущий инструмент: None / "]" / "[" / "]["
         self._startup_done = False                                   # флаг: начальная инициализация закончена
         self._prev_had_both = False                                  # было ли оба файла в прошлой проверке
         self._was_playing_before_drag = False                        # играл ли плеер до начала drag метки
@@ -217,6 +221,7 @@ class EditorWindow(QMainWindow):
         mx_layout.setSpacing(GAP)
 
         self.multiplexer = PlayerWidget()
+        self.multiplexer.setMinimumHeight(200)
         mx_layout.addWidget(self.multiplexer, stretch=1)
 
         # ── Зона таймлайнов с общим ползунком ──
@@ -233,11 +238,8 @@ class EditorWindow(QMainWindow):
         self.drop_area.audio_dropped.connect(self._on_audio_dropped)
         self.drop_area.audio_delete_requested.connect(self._on_audio_delete_requested)
         self.drop_area.audio_clicked.connect(self._on_audio_clicked)
-        self.drop_area.link_toggled.connect(self.state.set_linked_mode)         # клик по кнопке → состояние
-        self.state.linked_mode_changed.connect(self.drop_area.set_linked)       # состояние → обновить кнопку
-        self.state.linked_mode_changed.connect(lambda _: self._update_zone_highlight())   # состояние → подсветка
-        self.state.linked_mode_changed.connect(self._on_linked_mode_changed_deferred)      # отложенно — избежать зависания
-        self.state.linked_mode_changed.connect(self.multiplexer.set_linked_mode)          # состояние → плеер
+        # Связка удалена — плеер всегда синхронизирует видео+аудио
+        self.multiplexer.set_linked_mode(True)
         upper.addWidget(self.drop_area, stretch=0)
 
         right_side.addLayout(upper, stretch=1)
@@ -302,6 +304,9 @@ class EditorWindow(QMainWindow):
 #         self.timeline.trim_changed.connect(self._on_video_trim_committed) # ОТКЛЮЧЕНО (старый таймлайн)
 
 #         self.timeline.seek_requested.connect(self.multiplexer.set_position)        # клик по полосе → разовый seek # ОТКЛЮЧЕНО (старый таймлайн)
+        self.timeline.height_changed.connect(self._on_timeline_height_changed)
+        self.timeline.marker_clicked.connect(self._on_marker_clicked)
+        self.timeline.marker_place_requested.connect(self._on_marker_place)
         self.timeline.playhead_drag_started.connect(self._on_scrub_started)
         self.timeline.playhead_dragged.connect(self._on_scrub_dragged)
         self.timeline.playhead_drag_finished.connect(self._on_scrub_finished)
@@ -352,26 +357,34 @@ class EditorWindow(QMainWindow):
         self.state.add_video_file(path, duration=0.0)
 
     def _update_zone_highlight(self):
-        """Подсветить зоны по связке и переключить режим ползунка таймлайнов."""
-        mode = self.multiplexer.mode
-        linked = self.state.get_linked_mode()
-        self.drop_area.update_highlight(mode, linked)
-        self.timeline.set_active_mode(mode)
+        """Подсветить активную зону и активный файл. Активен только ОДИН файл."""
+        # Пунктирные рамки зон
+        self.drop_area.update_highlight(self._active_kind, False)
+
+        # Внутренние рамки файлов: подсвечен только активный
+        if self._active_kind == "video" and self.state.has_videos():
+            self.drop_area.set_video_active(self.state.get_active_index())
+            self.drop_area.set_audio_active(False)
+            self.timeline.set_active_video(self.state.get_active_index())
+        elif self._active_kind == "audio" and self.state.has_audio():
+            self.drop_area.set_video_active(-1)  # снять подсветку со всех видео-файлов
+            self.drop_area.set_audio_active(True)
+            self.timeline.set_active_audio()
 
     def _on_audio_clicked(self):
-        """Клик по аудио-зоне — переключить режим плеера на audio."""
+        """Клик по аудио-зоне — аудио становится активным файлом."""
         if self.state.has_audio():
             logger.debug("Клик по аудио-зоне → режим audio")
+            self._active_kind = "audio"
             QTimer.singleShot(0, lambda: self.multiplexer.set_mode("audio"))
             self._update_zone_highlight()
 
     def _on_video_selected(self, index: int):
-        """Пользователь кликнул по файлу в списке."""
+        """Пользователь кликнул по видеофайлу в списке."""
+        self._active_kind = "video"
         self.state.set_active_video(index)
-        self.multiplexer.set_mode("video")                    # всегда переключаемся в режим video
+        QTimer.singleShot(0, lambda: self.multiplexer.set_mode("video"))
         self._update_zone_highlight()
-        self.drop_area.drop_video.set_dimmed(False)           # принудительно снимаем затемнение
-        self.drop_area.set_video_active(index)                # принудительно обновить рамку и кнопку
 
     def _on_audio_dropped(self, path: str):
         """Файл принят в зоне аудио."""
@@ -482,12 +495,6 @@ class EditorWindow(QMainWindow):
             self.multiplexer.set_mode("audio")
             self._update_zone_highlight()
 
-        # Если связанных файлов больше нет — сбросить режим связки
-        if not (self.state.has_videos() and self.state.has_audio()):
-            if self.state.get_linked_mode():
-                logger.debug("Остался один файл — режим связки сброшен")
-                self.state.set_linked_mode(False)
-
         self._update_timelines_visibility()
 
 
@@ -528,12 +535,6 @@ class EditorWindow(QMainWindow):
             logger.debug("Аудио удалено — переключаемся на video")
             self.multiplexer.set_mode("video")
             self._update_zone_highlight()
-
-        # Если связанных файлов больше нет — сбросить режим связки
-        if not (self.state.has_videos() and self.state.has_audio()):
-            if self.state.get_linked_mode():
-                logger.debug("Остался один файл — режим связки сброшен")
-                self.state.set_linked_mode(False)
 
         self._update_timelines_visibility()
 
@@ -643,8 +644,6 @@ class EditorWindow(QMainWindow):
             self.state.get_audio_path()
         )
         self._update_track_drag_mode()
-        self._update_link_enabled()
-        self._maybe_auto_link()
 
     def _on_linked_mode_changed_deferred(self, linked: bool):
         """Отложенно обновляем TimelineZone, чтобы не зависать на перестройке layout."""
@@ -669,11 +668,72 @@ class EditorWindow(QMainWindow):
 
 
     def _on_timeline_active_changed(self, kind: str, index: int):
-        """Клик по иконке дорожки в таймлайне."""
+        """Клик по иконке дорожки в таймлайне — сделать её активной."""
         if kind == "video":
-            self.state.set_active_video(index)
+            self._on_video_selected(index)
         elif kind == "audio":
             self._on_audio_clicked()
+
+    def _on_timeline_height_changed(self, height: int):
+        """Таймлайн сообщил идеальную высоту (после зума дорожки)."""
+        self.timeline.setFixedHeight(max(80, height))
+
+    def _on_marker_clicked(self, path: str, global_pos):
+        """Клик на карандаш — открыть меню инструментов метки."""
+        if self._marker_menu is not None:
+            self._marker_menu.deleteLater()
+            self._marker_menu = None
+
+        self._marker_menu = MarkerMenu(
+            cursor_factory=self.timeline.make_tool_cursor,
+            active_tool=self._active_tool,
+            parent=self,
+        )
+        self._marker_menu.tool_selected.connect(self._on_marker_tool_selected)
+        self._marker_menu.cursor_reset.connect(self._on_marker_cursor_reset)
+        self._marker_menu.open_at(global_pos)
+
+    def _on_marker_tool_selected(self, kind: str):
+        """Пользователь выбрал инструмент в меню — включить кастомный курсор."""
+        self._active_tool = kind
+        self.timeline.set_tool_cursor(kind)
+        logger.info(f"[MARKER] выбран инструмент: {kind}")
+
+    def _on_marker_cursor_reset(self):
+        """Клик на крестик в меню — сбросить активный инструмент."""
+        self._active_tool = None
+        self.timeline.set_tool_cursor(None)
+        logger.debug("Инструмент метки сброшен")
+
+    def _on_marker_place(self, path: str, time_sec: float):
+        """Клик по дорожке при активном инструменте — поставить метку и сбросить."""
+        logger.info(
+            f"[MARKER] place: path={Path(path).name if path else '?'} "
+            f"time={time_sec:.2f} tool={self._active_tool}"
+        )
+        if not self._active_tool:
+            logger.warning("[MARKER] нет активного инструмента — пропуск")
+            return
+
+        # Метка ставится только на активную дорожку. Если кликнули на другую — переключаем.
+        active_path = self.state.get_video_path()
+        if path != active_path:
+            try:
+                idx = self.state.get_video_files().index(path)
+                self._on_video_selected(idx)
+                active_path = path
+            except ValueError:
+                logger.warning(
+                    f"[MARKER] путь {path} не в списке видео — пропуск"
+                )
+                return
+
+        ok = self.state.add_timeline_marker(time_sec, self._active_tool)
+        logger.info(f"[MARKER] add_timeline_marker → {ok}")
+
+        # Сброс инструмента после установки
+        self._active_tool = None
+        self.timeline.set_tool_cursor(None)
 
     def _on_scrub_started(self):
         """Начало drag по скрабберу: пауза плеера + кэш кадров."""

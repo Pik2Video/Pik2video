@@ -72,6 +72,7 @@ class EditorState(QObject):
 
     video_limit_reached = Signal()           # попытка добавить >3 видео
     linked_mode_changed = Signal(bool)       # режим связки видео+аудио переключён
+    timeline_markers_changed = Signal()      # изменение меток на дорожке таймлайна
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -82,7 +83,8 @@ class EditorState(QObject):
         self._video_durations: dict[str, float] = {}
         self._trims: dict[str, tuple] = {}
         self._preferred_names: dict[str, str] = {}  # path → желаемое имя экспорта
-        self._markers: dict[str, list[tuple[float, float]]] = {}  # path -> [(time, offset_x), ...]
+        self._markers: dict[str, list[tuple[float, float]]] = {}  # path -> [(time, offset_x), ...] (пресеты зума)
+        self._timeline_markers: dict[str, list[tuple[float, str]]] = {}  # path -> [(time, "["/"]"/"]["), ...]
 
         # Аудио
         self._audio_path: Optional[str] = None
@@ -172,6 +174,7 @@ class EditorState(QObject):
         self._trims.pop(path, None)
         self._preferred_names.pop(path, None)
         self._markers.pop(path, None)
+        self._timeline_markers.pop(path, None)
 
         logger.debug(f"Видео удалено: {path} (осталось {len(self._video_files)})")
 
@@ -233,6 +236,7 @@ class EditorState(QObject):
         self._trims.clear()
         self._preferred_names.clear()
         self._markers.clear()
+        self._timeline_markers.clear()
         self._active_index = -1
         self._position = 0.0
         self._source_resolution = (0, 0)
@@ -863,6 +867,168 @@ class EditorState(QObject):
         )
         return (new_offset, new_zoom)
 
+    # ── Метки таймлайна (["["/"]"/"]["]) ──
+
+    def add_timeline_marker(self, time_sec: float, kind: str) -> bool:
+        """Добавить метку на дорожку активного видео.
+
+        kind: "[" — открыть, "]" — закрыть, "][" — вставка.
+        Возвращает True, если метка создана (или уже была на этом месте).
+        """
+        if kind not in ("[", "]", "]["):
+            logger.warning(f"Неизвестный тип метки: {kind}")
+            return False
+        path = self.get_video_path()
+        if not path:
+            return False
+
+        if path not in self._timeline_markers:
+            self._timeline_markers[path] = []
+
+        # Если на этой позиции уже есть метка — заменить её на новую
+        for i, (t, k) in enumerate(self._timeline_markers[path]):
+            if abs(t - time_sec) < 0.001:
+                if k == kind:
+                    return True  # уже такая же
+                self._timeline_markers[path][i] = (time_sec, kind)
+                self._timeline_markers[path].sort(key=lambda x: x[0])
+                self._save_files()
+                self.timeline_markers_changed.emit()
+                return True
+
+        self._timeline_markers[path].append((time_sec, kind))
+        self._timeline_markers[path].sort(key=lambda x: x[0])
+        self._save_files()
+        self.timeline_markers_changed.emit()
+        logger.debug(f"Метка таймлайна: {kind} @ {time_sec:.2f}с на {path}")
+        return True
+
+    def get_timeline_markers(self, path: Optional[str] = None) -> list:
+        """Список [(time_sec, kind), ...] для указанного пути (или активного видео)."""
+        if path is None:
+            path = self.get_video_path()
+        if not path:
+            return []
+        return list(self._timeline_markers.get(path, []))
+
+    def remove_timeline_marker(self, time_sec: float, kind: Optional[str] = None) -> bool:
+        """Удалить метку на позиции time_sec (опционально — только заданного типа)."""
+        path = self.get_video_path()
+        if not path or path not in self._timeline_markers:
+            return False
+        markers = self._timeline_markers[path]
+        for i, (t, k) in enumerate(markers):
+            if abs(t - time_sec) < 0.001:
+                if kind is None or k == kind:
+                    markers.pop(i)
+                    if not markers:
+                        del self._timeline_markers[path]
+                    self._save_files()
+                    self.timeline_markers_changed.emit()
+                    return True
+        return False
+
+    def get_cut_intervals(self, path: Optional[str] = None) -> list:
+        """Вычислить [start, end] интервалы, которые вырезаются метками.
+
+        Правила:
+        - `]` режет влево: от ближайшей `[` слева (или от 0) до себя.
+        - `[` режет вправо: от себя до ближайшей `]` справа (или до duration).
+        - `][` не режет — только разделяет для вставки.
+        Пересекающиеся интервалы объединяются.
+        """
+        if path is None:
+            path = self.get_video_path()
+        if not path:
+            return []
+        markers = self._timeline_markers.get(path, [])
+        if not markers:
+            return []
+
+        duration = self.get_video_duration_for(path)
+        if duration <= 0:
+            return []
+
+        left_markers = [t for t, k in markers if k == "["]
+        right_markers = [t for t, k in markers if k == "]"]
+
+        cuts = []
+        for t, k in markers:
+            if k == "]":
+                # Ближайшая [ строго левее t (или 0)
+                left_bound = 0.0
+                for lt in left_markers:
+                    if lt < t and lt > left_bound:
+                        left_bound = lt
+                cuts.append((left_bound, t))
+            elif k == "[":
+                # Ближайшая ] строго правее t (или duration)
+                right_bound = duration
+                for rt in right_markers:
+                    if rt > t and rt < right_bound:
+                        right_bound = rt
+                cuts.append((t, right_bound))
+
+        if not cuts:
+            return []
+
+        cuts.sort()
+        merged = [cuts[0]]
+        for start, end in cuts[1:]:
+            last_start, last_end = merged[-1]
+            if start <= last_end:
+                merged[-1] = (last_start, max(last_end, end))
+            else:
+                merged.append((start, end))
+        return merged
+
+    def get_visible_intervals(self, path: Optional[str] = None) -> list:
+        """Видимые [start, end] интервалы — дополнение cut до [0, duration]."""
+        if path is None:
+            path = self.get_video_path()
+        duration = self.get_video_duration_for(path) if path else 0.0
+        if duration <= 0:
+            return []
+
+        cuts = self.get_cut_intervals(path)
+        if not cuts:
+            return [(0.0, duration)]
+
+        visible = []
+        prev_end = 0.0
+        for cs, ce in cuts:
+            if cs > prev_end + 0.001:
+                visible.append((prev_end, cs))
+            prev_end = max(prev_end, ce)
+        if prev_end < duration - 0.001:
+            visible.append((prev_end, duration))
+        return visible
+
+    def is_time_visible(self, time_sec: float, path: Optional[str] = None) -> bool:
+        """Попадает ли время в видимый (не вырезанный) участок."""
+        for start, end in self.get_visible_intervals(path):
+            if start <= time_sec <= end:
+                return True
+        return False
+
+    def next_visible_time(self, time_sec: float, path: Optional[str] = None) -> float:
+        """Если time_sec в cut-участке — вернуть начало следующего видимого."""
+        if self.is_time_visible(time_sec, path):
+            return time_sec
+        for start, _end in self.get_visible_intervals(path):
+            if start > time_sec:
+                return start
+        return time_sec
+
+    def clear_timeline_markers(self, path: Optional[str] = None):
+        """Очистить метки таймлайна для пути (или активного видео)."""
+        if path is None:
+            path = self.get_video_path()
+        if path and path in self._timeline_markers:
+            del self._timeline_markers[path]
+            self._save_files()
+            self.timeline_markers_changed.emit()
+
     def _save_files(self):
         """Сохранить список файлов и имена экспорта в JSON."""
         if self._loading:
@@ -883,7 +1049,11 @@ class EditorState(QObject):
                 "video_offset": self._video_offset,                # сдвиг видео-дорожки
                 "linked_mode": self._linked_mode,                  # видео+аудио связаны
                 "offset_x": self._offset_x,                        # сдвиг рамки кадра от центра
-                "markers": {k: list(v) for k, v in self._markers.items()},  # метки ключевых кадров
+                "markers": {k: list(v) for k, v in self._markers.items()},  # метки ключевых кадров (пресеты)
+                "timeline_markers": {                                        # метки таймлайна: [t, kind]
+                    k: [[float(t), str(kind)] for t, kind in v]
+                    for k, v in self._timeline_markers.items()
+                },
             }
             with open(self._persist_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
@@ -928,6 +1098,20 @@ class EditorState(QObject):
                     # совсем старый — без зума и пресета
                     normalized.append((float(m[0]), float(m[1]), 0, "original"))
             self._markers[path_key] = sorted(normalized, key=lambda x: x[0])
+
+        # Восстановление меток таймлайна
+        tm_raw = data.get("timeline_markers", {})
+        self._timeline_markers = {}
+        for path_key, lst in tm_raw.items():
+            normalized = []
+            for item in lst:
+                if isinstance(item, (list, tuple)) and len(item) >= 2:
+                    t = float(item[0])
+                    kind = str(item[1])
+                    if kind in ("[", "]", "]["):
+                        normalized.append((t, kind))
+            if normalized:
+                self._timeline_markers[path_key] = sorted(normalized, key=lambda x: x[0])
 
         self._loading = True
         try:
