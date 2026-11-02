@@ -40,18 +40,15 @@ from src.pik2video.gui.common.close_policy import (
 from src.pik2video.gui.common.dialogs import confirm
 from src.pik2video.storage.thumbnail_cache import ThumbnailCache
 
-from .timeline import AudioTimelineWidget                               # таймлайн для аудио с waveform
 from .panels import BottomPanel
 from .crop_mode import CropModeController
 from .panels import DropArea
 from .export import ExportController
-from .timeline import FramePreview
 from .player import PlayerWidget
 from .record_menu import RecordMenuController
 from .state import EditorState
+from .timeline import TimelineWidget as NewTimeline, FramePreview
 from .thumbnail_loader import ThumbnailLoader
-from .timeline import TimelineWidget
-from .timeline import TimelineZone
 from .panels import ToolsPanel
 from .panels import TopBar
 
@@ -145,13 +142,13 @@ class EditorWindow(QMainWindow):
         self.multiplexer.set_audio_volume(self.state.get_audio_volume())
 
         # Начальная установка сдвигов дорожек из сохранённых значений
-        self._timeline_zone.set_audio_offset(self.state.get_audio_offset())
-        self._timeline_zone.set_video_offset(self.state.get_video_offset())
+        self.timeline.set_audio_offset(self.state.get_audio_offset())
+        self.timeline.set_video_offset(self.state.get_video_offset())
         self.multiplexer.set_audio_offset(self.state.get_audio_offset())
 
         self._update_timelines_visibility()                    # явно выставить пустое/заполненное состояние
         self.drop_area.set_linked(self.state.get_linked_mode())  # восстановить режим связки из JSON
-        self._timeline_zone.set_linked_mode(self.state.get_linked_mode())  # восстановить вид таймлайна
+        self.timeline.set_linked_mode(self.state.get_linked_mode())  # восстановить вид таймлайна
         self.multiplexer.set_linked_mode(self.state.get_linked_mode())     # восстановить режим плеера
 
     
@@ -222,12 +219,9 @@ class EditorWindow(QMainWindow):
         mx_layout.addWidget(self.multiplexer, stretch=1)
 
         # ── Зона таймлайнов с общим ползунком ──
-        self._timeline_zone = TimelineZone()
-        self.timeline = TimelineWidget()
-        self.audio_timeline = AudioTimelineWidget()
-        self._timeline_zone.set_video_timeline(self.timeline)
-        self._timeline_zone.set_audio_timeline(self.audio_timeline)
-        mx_layout.addWidget(self._timeline_zone, stretch=0)
+        self.timeline = NewTimeline(self.state)
+        self.timeline.seek_requested.connect(self.multiplexer.set_position)
+        
 
         upper.addWidget(mx_container, stretch=1)
 
@@ -253,7 +247,7 @@ class EditorWindow(QMainWindow):
 
         self.bottom_panel.export_path_clicked.connect(self._on_export_path_clicked)
         self.bottom_panel.export_name_changed.connect(self.state.set_export_filename)
-        right_side.addWidget(self.bottom_panel, stretch=0)
+        
 
         # Заполнить путь экспорта из состояния
         self._sync_export_path_field()
@@ -263,6 +257,8 @@ class EditorWindow(QMainWindow):
         middle.addLayout(right_side, stretch=1)
 
         root.addLayout(middle, stretch=1)
+        root.addWidget(self.timeline, stretch=0)
+        root.addWidget(self.bottom_panel, stretch=0)
 
         # ── Связи между EditorState и виджетами ──
         self.state.videos_changed.connect(self._on_videos_changed)
@@ -275,8 +271,8 @@ class EditorWindow(QMainWindow):
         self.state.audio_trim_changed.connect(self._on_audio_trim_changed)   # изменения трима → в аудио-таймлайн
         self.state.audio_format_changed.connect(self._on_audio_format_changed) # смена формата → в FormatTool
 
-        self.state.position_changed.connect(self._timeline_zone.set_position)    # позиция → общий ползунок
-        self.state.trim_changed.connect(self.timeline.set_trim)
+        self.state.position_changed.connect(self.timeline.set_position)  # позиция → красная линия
+#         self.state.trim_changed.connect(self.timeline.set_trim) # ОТКЛЮЧЕНО (старый таймлайн)
 
         # ── Плеер → EditorState ──
         self.multiplexer.position_changed.connect(self.state.set_position)
@@ -293,41 +289,41 @@ class EditorWindow(QMainWindow):
 
         self.state.video_limit_reached.connect(self._on_video_limit_reached)               # лимит 3 видео
 
-        self.state.audio_offset_changed.connect(self._timeline_zone.set_audio_offset)      # сдвиг аудио → таймлайн
+#         self.state.audio_offset_changed.connect(self.timeline.set_audio_offset)      # сдвиг аудио → таймлайн # ОТКЛЮЧЕНО (старый таймлайн)
         self.state.audio_offset_changed.connect(self.multiplexer.set_audio_offset)         # сдвиг аудио → плеер
-        self.state.video_offset_changed.connect(self._timeline_zone.set_video_offset)      # сдвиг видео → таймлайн
+#         self.state.video_offset_changed.connect(self.timeline.set_video_offset)      # сдвиг видео → таймлайн # ОТКЛЮЧЕНО (старый таймлайн)
 
         self.state.trim_changed.connect(self.multiplexer.set_trim_range)               # видео-трим → плеер
         self.state.audio_trim_changed.connect(self.multiplexer.set_audio_trim_range)   # аудио-трим → аудио-плеер
 
 
         self.timeline.seek_requested.connect(self.multiplexer.set_position)
-        self.timeline.trim_changed.connect(self._on_video_trim_committed)
+#         self.timeline.trim_changed.connect(self._on_video_trim_committed) # ОТКЛЮЧЕНО (старый таймлайн)
 
-        self._timeline_zone.seek_requested.connect(self.multiplexer.set_position)        # клик по полосе → разовый seek
-        self._timeline_zone.scrub_started.connect(self._on_scrub_started)                # начало drag → пауза плеера
-        self._timeline_zone.scrub_dragged.connect(self._on_scrub_dragged)                # drag → превью кадра
-        self._timeline_zone.scrub_finished.connect(self._on_scrub_finished)              # конец drag → возобновление
+#         self.timeline.seek_requested.connect(self.multiplexer.set_position)        # клик по полосе → разовый seek # ОТКЛЮЧЕНО (старый таймлайн)
+#         self.timeline.scrub_started.connect(self._on_scrub_started)                # начало drag → пауза плеера # ОТКЛЮЧЕНО (старый таймлайн)
+#         self.timeline.scrub_dragged.connect(self._on_scrub_dragged)                # drag → превью кадра # ОТКЛЮЧЕНО (старый таймлайн)
+#         self.timeline.scrub_finished.connect(self._on_scrub_finished)              # конец drag → возобновление # ОТКЛЮЧЕНО (старый таймлайн)
 
-        self.timeline.marker_drag_started.connect(self._on_marker_drag_started)
-        self.timeline.marker_dragged.connect(self._on_marker_dragged)
-        self.timeline.marker_drag_finished.connect(self._on_marker_drag_finished)
-        self.timeline.marker_double_clicked.connect(self._on_marker_double_clicked)
+#         self.timeline.marker_drag_started.connect(self._on_marker_drag_started) # ОТКЛЮЧЕНО (старый таймлайн)
+#         self.timeline.marker_dragged.connect(self._on_marker_dragged) # ОТКЛЮЧЕНО (старый таймлайн)
+#         self.timeline.marker_drag_finished.connect(self._on_marker_drag_finished) # ОТКЛЮЧЕНО (старый таймлайн)
+#         self.timeline.marker_double_clicked.connect(self._on_marker_double_clicked) # ОТКЛЮЧЕНО (старый таймлайн)
 
-        self.audio_timeline.marker_drag_started.connect(self._on_marker_drag_started)     # аудио: пауза/возобновление
-        self.audio_timeline.marker_drag_finished.connect(self._on_marker_drag_finished)
+#         self.timeline.marker_drag_started.connect(self._on_marker_drag_started)     # аудио: пауза/возобновление # ОТКЛЮЧЕНО (старый таймлайн)
+#         self.timeline.marker_drag_finished.connect(self._on_marker_drag_finished) # ОТКЛЮЧЕНО (старый таймлайн)
 
         # Drag тела дорожки (сдвиг гостя)
-        self.timeline.track_drag_started.connect(self._on_video_track_started)
-        self.timeline.track_dragged.connect(self._on_video_track_dragged)
-        self.timeline.track_drag_finished.connect(self._on_video_track_finished)
+#         self.timeline.track_drag_started.connect(self._on_video_track_started) # ОТКЛЮЧЕНО (старый таймлайн)
+#         self.timeline.track_dragged.connect(self._on_video_track_dragged) # ОТКЛЮЧЕНО (старый таймлайн)
+#         self.timeline.track_drag_finished.connect(self._on_video_track_finished) # ОТКЛЮЧЕНО (старый таймлайн)
 
-        self.audio_timeline.track_drag_started.connect(self._on_audio_track_started)
-        self.audio_timeline.track_dragged.connect(self._on_audio_track_dragged)
-        self.audio_timeline.track_drag_finished.connect(self._on_audio_track_finished)
+#         self.timeline.track_drag_started.connect(self._on_audio_track_started) # ОТКЛЮЧЕНО (старый таймлайн)
+#         self.timeline.track_dragged.connect(self._on_audio_track_dragged) # ОТКЛЮЧЕНО (старый таймлайн)
+#         self.timeline.track_drag_finished.connect(self._on_audio_track_finished) # ОТКЛЮЧЕНО (старый таймлайн)
 
-        self.audio_timeline.trim_changed.connect(self._on_audio_trim_committed)     # финальный трим аудио → в состояние
-        self.audio_timeline.seek_requested.connect(self._on_audio_seek)             # seek по аудио-таймлайну
+#         self.timeline.trim_changed.connect(self._on_audio_trim_committed)     # финальный трим аудио → в состояние # ОТКЛЮЧЕНО (старый таймлайн)
+#         self.timeline.seek_requested.connect(self._on_audio_seek)             # seek по аудио-таймлайну # ОТКЛЮЧЕНО (старый таймлайн)
 
         self.top_bar.tools_clicked.connect(self.tools_panel.show_tools)
         self.top_bar.settings_clicked.connect(self.tools_panel.show_settings)
@@ -355,16 +351,16 @@ class EditorWindow(QMainWindow):
 
     def _update_zone_highlight(self):
         """Подсветить зоны по связке и переключить режим ползунка таймлайнов."""
-        mode = self.multiplexer._mode
+        mode = self.multiplexer.mode
         linked = self.state.get_linked_mode()
         self.drop_area.update_highlight(mode, linked)
-        self._timeline_zone.set_active_mode(mode)
+        self.timeline.set_active_mode(mode)
 
     def _on_audio_clicked(self):
         """Клик по аудио-зоне — переключить режим плеера на audio."""
         if self.state.has_audio():
             logger.debug("Клик по аудио-зоне → режим audio")
-            self.multiplexer.set_mode("audio")
+            QTimer.singleShot(0, lambda: self.multiplexer.set_mode("audio"))
             self._update_zone_highlight()
 
     def _on_video_selected(self, index: int):
@@ -429,7 +425,7 @@ class EditorWindow(QMainWindow):
         self.state.clear_video()                                  # плеер отпускает файлы здесь
         self.state.clear_audio()
         self.state.set_position(0.0)                              # сбросить позицию в state
-        self._timeline_zone.set_position(0.0)                     # принудительно сбросить ползунок
+        self.timeline.set_position(0.0)                     # принудительно сбросить ползунок
 
         self._update_zone_highlight()                             # снять подсветку (нечего подсвечивать)
 
@@ -479,7 +475,7 @@ class EditorWindow(QMainWindow):
         self._sync_export_name_field()
 
         # Если был в видео-режиме и видео не осталось — переключиться на аудио
-        if self.multiplexer._mode == "video" and self.state.has_audio():
+        if self.multiplexer.mode == "video" and self.state.has_audio():
             logger.debug("Видео удалено — переключаемся на audio")
             self.multiplexer.set_mode("audio")
             self._update_zone_highlight()
@@ -503,9 +499,6 @@ class EditorWindow(QMainWindow):
 
         self.multiplexer.load_audio(path)                        # общий плеер переключается на страницу аудио
 
-        self.audio_timeline.set_source(path, self.state.get_audio_duration())  # waveform + длительность
-        self.audio_timeline.set_trim(*self.state.get_audio_trim())             # текущий трим
-
         self._sync_export_name_field()                           # подставляем имя файла и расширение
         self.bottom_panel.set_export_enabled(self.state.has_any_media())       # экспорт разрешён при аудио
 
@@ -522,7 +515,6 @@ class EditorWindow(QMainWindow):
 
         self.multiplexer.unload_audio()
 
-        self.audio_timeline.clear()
         self.bottom_panel.set_export_enabled(self.state.has_videos())
         self._sync_export_name_field()
 
@@ -530,7 +522,7 @@ class EditorWindow(QMainWindow):
             self.tools_panel.switch_to_video()
 
         # Если был в аудио-режиме и аудио не осталось — переключиться на видео
-        if self.multiplexer._mode == "audio" and self.state.has_videos():
+        if self.multiplexer.mode == "audio" and self.state.has_videos():
             logger.debug("Аудио удалено — переключаемся на video")
             self.multiplexer.set_mode("video")
             self._update_zone_highlight()
@@ -546,7 +538,7 @@ class EditorWindow(QMainWindow):
 
     def _on_audio_trim_changed(self, start: float, end: float):
         """EditorState сообщил новый трим аудио → обновляем аудио-таймлайн."""
-        self.audio_timeline.set_trim(start, end)
+        pass # TODO: реализовать после создания визуальных маркеров
 
     def _on_audio_format_changed(self, fmt: str):
         """EditorState сообщил смену аудио-формата → обновляем FormatTool."""
@@ -600,7 +592,7 @@ class EditorWindow(QMainWindow):
         trim_start, _ = self.state.get_trim()
         if trim_start <= 0:
             return
-        if self.multiplexer._player.duration() > 0:
+        if self.multiplexer.video_player.duration() > 0:
             self.multiplexer.set_position(trim_start)
         elif attempts > 0:
             QTimer.singleShot(
@@ -611,23 +603,18 @@ class EditorWindow(QMainWindow):
         """Плеер сообщил длительность видео → обновляем видео-таймлайн и EditorState."""
         if self.state.has_videos():
             self.state.update_active_duration(seconds)           # длительность видео
-            self.timeline.set_duration(seconds)                  # видео-таймлайн
-            self._timeline_zone.set_durations(
-                self.state.get_video_duration(),
-                self.state.get_audio_duration(),
-            )
-            self._update_track_drag_mode()
+            idx = self.state.get_active_index()
+            if idx >= 0:
+                self.timeline.set_track_duration(idx, seconds)
+            # Обновить и аудио-дорожку (если она есть)
+            if self.state.has_audio() and self.state.get_audio_duration() > 0:
+                self.timeline.set_audio_duration(self.state.get_audio_duration())
 
     def _on_audio_duration_changed(self, seconds: float):
         """Плеер сообщил длительность аудио → обновляем аудио-таймлайн и EditorState."""
         if self.state.has_audio():
             self.state.set_audio_duration(seconds)               # длительность аудио
-            self.audio_timeline.set_duration(seconds)            # аудио-таймлайн
-            self._timeline_zone.set_durations(
-                self.state.get_video_duration(),
-                self.state.get_audio_duration(),
-            )
-            self._update_track_drag_mode()
+            self.timeline.set_audio_duration(seconds)
 
     def _on_videos_changed(self):
         """EditorState сообщил, что состав списка изменился."""
@@ -648,12 +635,10 @@ class EditorWindow(QMainWindow):
 
 
     def _update_timelines_visibility(self):
-        """Обновить пропорции дорожек и их пустое состояние (обе всегда видны)."""
-        self.timeline.set_empty(not self.state.has_videos())
-        self.audio_timeline.set_empty(not self.state.has_audio())
-        self._timeline_zone.set_durations(
-            self.state.get_video_duration(),
-            self.state.get_audio_duration(),
+        """Перерисовать дорожки на основе состояния."""
+        self.timeline.rebuild_tracks(
+            self.state.get_video_files(),
+            self.state.get_audio_path()
         )
         self._update_track_drag_mode()
         self._update_link_enabled()
@@ -662,7 +647,7 @@ class EditorWindow(QMainWindow):
     def _on_linked_mode_changed_deferred(self, linked: bool):
         """Отложенно обновляем TimelineZone, чтобы не зависать на перестройке layout."""
         from PySide6.QtCore import QTimer
-        QTimer.singleShot(0, lambda: self._timeline_zone.set_linked_mode(linked))
+        QTimer.singleShot(0, lambda: self.timeline.set_linked_mode(linked))
 
     def _maybe_auto_link(self):
         """Автоматически включить связку при появлении второго файла."""
@@ -698,7 +683,7 @@ class EditorWindow(QMainWindow):
         pixmap = self.multiplexer.get_last_frame()
         if pixmap is None:
             return
-        global_pos = self._timeline_zone.seek_bar.mapToGlobal(QPoint(x_local, 0))
+        global_pos = self.timeline.seek_bar.mapToGlobal(QPoint(x_local, 0))
         self._frame_preview.show_frame(pixmap, global_pos.x(), global_pos.y())
 
     def _on_scrub_finished(self):
@@ -722,7 +707,7 @@ class EditorWindow(QMainWindow):
         audio_draggable = can_compare and a < v              # аудио — гость
 
         self.timeline.set_draggable(video_draggable)
-        self.audio_timeline.set_draggable(audio_draggable)
+        self.timeline.set_draggable(audio_draggable)
 
         self._max_video_offset = (a - v) if video_draggable else 0.0
         self._max_audio_offset = (v - a) if audio_draggable else 0.0
@@ -735,7 +720,7 @@ class EditorWindow(QMainWindow):
     def _on_video_track_dragged(self, delta_sec: float):
         new = max(0.0, min(self._max_video_offset, self._drag_start_offset + delta_sec))
         self._current_dragged_offset = new
-        self._timeline_zone.set_video_offset(new)
+        self.timeline.set_video_offset(new)
 
     def _on_video_track_finished(self):
         self.multiplexer.end_trim_drag(self._was_playing_before_drag)
@@ -750,7 +735,7 @@ class EditorWindow(QMainWindow):
     def _on_audio_track_dragged(self, delta_sec: float):
         new = max(0.0, min(self._max_audio_offset, self._drag_start_offset + delta_sec))
         self._current_dragged_offset = new
-        self._timeline_zone.set_audio_offset(new)
+        self.timeline.set_audio_offset(new)
 
     def _on_audio_track_finished(self):
         self.multiplexer.end_trim_drag(self._was_playing_before_drag)
@@ -875,7 +860,11 @@ class EditorWindow(QMainWindow):
         return True
     
     def _on_marker_dragged(self, seconds: float, x_local: int):
-        """Перетаскивание маркера — показать превью кадра (throttle: не чаще 5 раз/сек)."""
+        """Перетаскивание маркера — двигать красную полоску и показывать превью кадра."""
+        # Двигаем красную полоску (курсор) и синхронизируем состояние
+        self.timeline.set_position(seconds)
+        self.state.set_position(seconds)
+
         now_ms = int(time.time() * 1000)
         if now_ms - self._last_preview_seek_ms >= 200:                # throttle 200 мс (5 fps)
             self.multiplexer.seek_for_preview(seconds)               # попросить декодер новый кадр
@@ -1018,7 +1007,7 @@ class EditorWindow(QMainWindow):
             raw_time = self.state.get_position()
             # Снапим к ближайшему кадру: player.position() может вернуть
             # 0.401 вместо 0.400, и сдвиг срабатывает на 1 кадр позже
-            fps = getattr(self.multiplexer, "_video_fps", 25.0) or 25.0
+            fps = self.multiplexer.video_fps or 25.0
             snapped_time = round(raw_time * fps) / fps
             current_offset = self.state.get_offset_x()
             current_zoom = self.state.get_aspect_zoom()
@@ -1158,8 +1147,8 @@ class EditorWindow(QMainWindow):
         if hasattr(self, "_marker_blink_timer") and self._marker_blink_timer.isActive():
             self._marker_blink_timer.stop()
         try:
-            self.multiplexer._player.stop()
-            self.multiplexer._player.setSource(QUrl())
+            self.multiplexer.video_player.stop()
+            self.multiplexer.video_player.setSource(QUrl())
         except Exception as e:
             logger.warning(f"Не удалось остановить плеер: {e}")
 

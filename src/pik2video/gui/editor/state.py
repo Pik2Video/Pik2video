@@ -265,6 +265,10 @@ class EditorState(QObject):
         path = self._video_files[self._active_index]
         return self._video_durations.get(path, 0.0)
 
+    def get_video_duration_for(self, path: str) -> float:
+        """Длительность конкретного видео по пути (0.0 если не загружено)."""
+        return self._video_durations.get(path, 0.0)
+
     def update_active_duration(self, seconds: float):
         """Обновить длительность активного файла (когда плеер её узнал)."""
         if self._active_index < 0:
