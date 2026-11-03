@@ -42,7 +42,6 @@ class PlayerWidget(PlayerUI):
         self._linked_mode = True
         self._marker_mode_active = False
         self._pre_play_resolver = None    # fn(current_sec) -> new_sec | None
-        self._suppress_cut_skip = False   # запрет перескока в _on_player_position_changed
         self._start_resolver = None       # fn(default_sec) -> new_sec
 
         self._speed_index = SPEED_PRESETS.index(1.0)
@@ -353,14 +352,14 @@ class PlayerWidget(PlayerUI):
                 # Защита от гонки: пока QMediaPlayer применяет seek,
                 # position-changed может приходить со старым значением (в cut-зоне).
                 # Без защиты — CUT-STOP → pause в момент старта.
-                self._suppress_cut_skip = True
+                self.engine.suppress_cut_skip = True
                 self.engine.seek(new_pos)
                 QTimer.singleShot(300, self._clear_suppress_cut_skip)
         self.engine.play()
 
     def _clear_suppress_cut_skip(self):
         """Снять защиту после того, как QMediaPlayer применил seek."""
-        self._suppress_cut_skip = False
+        self.engine.suppress_cut_skip = False
 
     def _update_play_button(self):
         """Обновить иконку play/pause по состоянию движка."""
@@ -407,11 +406,11 @@ class PlayerWidget(PlayerUI):
         logger.debug(
             f"[GOTO-START] trim=({trim_start:.2f},{trim_end:.2f}) → {target:.2f}"
         )
-        self._suppress_cut_skip = True
+        self.engine.suppress_cut_skip = True
         try:
             self.engine.seek(target)
         finally:
-            self._suppress_cut_skip = False
+            self.engine.suppress_cut_skip = False
 
     def _on_rewind(self):
         active = self._active_player()

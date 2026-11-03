@@ -47,6 +47,7 @@ from .export import ExportController
 from .player import PlayerWidget
 from .record_menu import RecordMenuController
 from .state import EditorState
+from src.pik2video.application.editor.editor_coordinator import EditorCoordinator
 from .timeline import TimelineWidget as NewTimeline, FramePreview
 from .timeline.marker_menu import MarkerMenu
 from src.pik2video.storage.thumbnail_loader import ThumbnailLoader
@@ -102,6 +103,13 @@ class EditorWindow(QMainWindow):
 
         self._apply_adaptive_size()
         self._build_ui()
+
+        # Координатор бизнес-логики (cut-skip, метки, scrub, экспорт)
+        self._coordinator = EditorCoordinator(
+            state=self.state,
+            player_manager=self.multiplexer.engine,
+            parent=self,
+        )
 
         # ── Контроллеры (после _build_ui — им нужен top_bar) ──
         self._export_saved_path = None                              # путь к файлу, который был в плеере до экспорта
@@ -793,11 +801,11 @@ class EditorWindow(QMainWindow):
             self.multiplexer.engine.pause()
 
         # Позиционируем плеер на метку (пользователь видит кадр, с которого тащит)
-        self.multiplexer._suppress_cut_skip = True
+        self.multiplexer.engine.suppress_cut_skip = True
         try:
             self.multiplexer.set_position(time_sec)
         finally:
-            self.multiplexer._suppress_cut_skip = False
+            self.multiplexer.engine.suppress_cut_skip = False
 
     def _on_marker_dragged(self, path: str, old_time: float, new_time: float):
         """Тащим метку: двигаем в state + прокручиваем плеер."""
@@ -806,11 +814,11 @@ class EditorWindow(QMainWindow):
             return
 
         # Плеер за меткой
-        self.multiplexer._suppress_cut_skip = True
+        self.multiplexer.engine.suppress_cut_skip = True
         try:
             self.multiplexer.set_position(new_time)
         finally:
-            self.multiplexer._suppress_cut_skip = False
+            self.multiplexer.engine.suppress_cut_skip = False
 
     def _on_marker_drag_finished(self, path: str, final_time: float):
         """Отпустили метку: сохраняем в JSON + возобновляем play при необходимости."""
@@ -1178,7 +1186,7 @@ class EditorWindow(QMainWindow):
 
     def _on_player_position_changed(self, seconds: float):
         """Движение ползунка: перескок/loop через cut + сдвиг рамки по меткам зума."""
-        if self.multiplexer._suppress_cut_skip:
+        if self.multiplexer.engine.suppress_cut_skip:
             return
 
         # ── 1. Перескок / loop на cut-участках ──

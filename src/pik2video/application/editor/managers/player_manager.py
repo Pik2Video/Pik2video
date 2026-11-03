@@ -77,6 +77,7 @@ class PlayerManager(QObject):
         self._audio_volume = 1.0
         self._video_fps = DEFAULT_FPS
         self._pause_on_next_frame = False       # play → pause после 1-го кадра
+        self.suppress_cut_skip = False          # блокировать cut-skip во время внутренних seek
         self._loop_start_resolver = None        # fn(default_sec) -> start_sec
 
     # ── API ──
