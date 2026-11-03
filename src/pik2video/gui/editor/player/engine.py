@@ -106,12 +106,18 @@ class PlayerEngine(QObject):
         self._apply_audio_volume()
 
     def load_video(self, path: str):
+        """Загрузить видео. Только setSource — без play/pause/seek.
+
+        Раньше здесь вызывалось play()/pause()/setPosition(0) подряд —
+        на больших файлах (4K, 60fps) это блокировало главный поток на
+        30-40 секунд: он ждал мьютекс libffmpegmediaplugin, который
+        держали фоновые потоки декодера (av:h264:df*).
+
+        Первый кадр показывается через _schedule_jump_to_start в window.py:
+        он ждёт duration > 0 и делает seek к стартовой позиции.
+        """
         self._player.stop()
-        self._player.setSource(QUrl())
         self._player.setSource(QUrl.fromLocalFile(path))
-        self._player.play()
-        self._player.pause()
-        self._player.setPosition(0)
 
     def unload_video(self):
         self._player.stop()

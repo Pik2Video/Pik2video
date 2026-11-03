@@ -107,6 +107,7 @@ class EditorWindow(QMainWindow):
         self._export_saved_path = None                              # путь к файлу, который был в плеере до экспорта
         self._marker_mode_active = False                             # режим сдвига рамки (перо/маркер)
         self._skip_cut_in_progress = False                           # защита от рекурсии при перескоке cut
+        self._pending_jump_to_start = False                          # прыжок на start — после durationChanged
         self._cut_stopped_at = None                                  # позиция, где плеер уже остановлен по cut
         self._was_playing_before_marker_drag = False                 # для drag метки
         self._active_kind = "video"                                  # какой файл активен: "video" | "audio"
@@ -480,7 +481,7 @@ class EditorWindow(QMainWindow):
         """EditorState сообщил, что активный файл сменился → отдаём плееру."""
         self.multiplexer.set_mode("video")                    # плеер в режим видео
         self.multiplexer.load_video(path)
-        self._schedule_jump_to_start()                        # прыжок на начало видимого
+        self._pending_jump_to_start = True                    # прыжок — после durationChanged
         self._refresh_timeline_keyframes()                    # подтягиваем метки для нового файла
         if self.crop_mode.is_active():                        # режим пресетов уже открыт — обновить оверлей
             self.multiplexer.set_preset_visible(True)
@@ -606,36 +607,22 @@ class EditorWindow(QMainWindow):
             self.multiplexer.set_position(a_start)
         self._export_saved_path = None
 
-    def _schedule_jump_to_start(self, attempts: int = 20):
-        """Прыжок на начало воспроизведения после загрузки видео.
-
-        Начало = первый видимый интервал (0 или первая метка ]).
-        Плеер грузит duration асинхронно: сразу после load_video() duration == 0.
-        Ждём по 50 мс до 1 сек, потом делаем set_position.
-        """
-        if not self.state.has_videos():
-            return
-
-        visible = self.state.get_visible_intervals()
-        target = visible[0][0] if visible else 0.0
-
-        if self.multiplexer.video_player.duration() > 0:
-            self.multiplexer.set_position(target)
-        elif attempts > 0:
-            QTimer.singleShot(
-                50, lambda: self._schedule_jump_to_start(attempts - 1)
-            )
-
     def _on_duration_changed(self, seconds: float):
-        """Плеер сообщил длительность видео → обновляем видео-таймлайн и EditorState."""
+        """Плеер сообщил длительность видео → обновляем таймлайн + отложенный прыжок."""
         if self.state.has_videos():
-            self.state.update_active_duration(seconds)           # длительность видео
+            self.state.update_active_duration(seconds)
             idx = self.state.get_active_index()
             if idx >= 0:
                 self.timeline.set_track_duration(idx, seconds)
-            # Обновить и аудио-дорожку (если она есть)
             if self.state.has_audio() and self.state.get_audio_duration() > 0:
                 self.timeline.set_audio_duration(self.state.get_audio_duration())
+
+        # Отложенный прыжок: Qt готов (duration пришла) → setPosition не блокирует.
+        if self._pending_jump_to_start:
+            self._pending_jump_to_start = False
+            visible = self.state.get_visible_intervals()
+            target = visible[0][0] if visible else 0.0
+            self.multiplexer.set_position(target)
 
     def _on_audio_duration_changed(self, seconds: float):
         """Плеер сообщил длительность аудио → обновляем аудио-таймлайн и EditorState."""
@@ -990,7 +977,8 @@ class EditorWindow(QMainWindow):
         self.drop_area.set_video_active(self.state.get_active_index())
         self._sync_export_name_field()
         self.timeline.set_active_video(self.state.get_active_index())
-        self._schedule_jump_to_start()   # playhead на начало видимого активного видео
+        # Прыжок делает _on_video_loaded (через _pending_jump_to_start → durationChanged).
+        # Здесь не дублируем: иначе два прыжка подряд.
 
     def load_file(self, path: str, preferred_name: str = "") -> bool:
         """Загрузить файл в редактор извне. Возвращает True при успехе.

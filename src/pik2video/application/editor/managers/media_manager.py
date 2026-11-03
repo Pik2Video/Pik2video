@@ -70,7 +70,7 @@ class MediaManager:
             self._preferred_names[path] = preferred_name
 
         self._active_index = self._video_files.index(path)
-        self._state._position = 0.0
+        self._state.set_position(0.0)
         self._state._presets.reset_for_new_video()
 
         logger.debug(f"Видео добавлено: {path} (всего {len(self._video_files)})")
@@ -97,7 +97,7 @@ class MediaManager:
 
         if not self._video_files:
             self._active_index = -1
-            self._state._position = 0.0
+            self._state.set_position(0.0)
             self._state.videos_changed.emit()
             self._state.video_unloaded.emit()
             return
@@ -106,7 +106,7 @@ class MediaManager:
             self._active_index = len(self._video_files) - 1
 
         new_path = self._video_files[self._active_index]
-        self._state._position = 0.0
+        self._state.set_position(0.0)
 
         self._state.videos_changed.emit()
         self._state.active_video_changed.emit(new_path)
@@ -122,7 +122,7 @@ class MediaManager:
 
         self._active_index = index
         path = self._video_files[index]
-        self._state._position = 0.0
+        self._state.set_position(0.0)
 
         logger.debug(f"Активный файл: {path}")
 
@@ -151,8 +151,8 @@ class MediaManager:
         self._preferred_names.clear()
         self._state._timeline.clear()
         self._active_index = -1
-        self._state._position = 0.0
-        self._state._video_offset = 0.0
+        self._state.set_position(0.0)
+        self._state.set_video_offset(0.0)
         self._state._presets.clear()
 
         self._state.videos_changed.emit()
@@ -260,8 +260,8 @@ class MediaManager:
         self._audio_path = None
         self._audio_duration = 0.0
         self._audio_trim = (0.0, 0.0)
-        self._state._audio_offset = 0.0
-        self._state._position = 0.0
+        self._state.set_audio_offset(0.0)
+        self._state.set_position(0.0)
         self._state._save_files()
         self._state.settings_changed.emit()
         self._state.audio_unloaded.emit()

@@ -1,17 +1,17 @@
 # src/pik2video/application/editor/editor_state.py
 """
-Состояние редактора.
+Состояние редактора — фасад с сигналами и делегатами.
 
-Отвечает только за:
-- список видеофайлов и активный индекс
-- трим и длительность для каждого файла
-- позицию воспроизведения
-- публикацию сигналов при изменениях
+Реальная логика — в компонентах (application/editor/managers/):
+- MediaManager        — видео, аудио, тримы, имена экспорта
+- PresetManager       — пресет кадра, зум, crop, метки зума
+- TimelineManager     — метки таймлайна, cut, visible, конвертации
+- PlaybackManager     — позиция, громкости, сдвиги, linked_mode
+- ExportSettings      — формат, разрешение, битрейт, скорость, путь
+- Persistence         — сохранение/загрузка состояния редактора в JSON
 
-Не знает:
-- про виджеты
-- про плеер
-- про FFmpeg
+EditorState делегирует все публичные методы компонентам.
+Через state эмитятся сигналы (GUI подписан на state).
 """
 
 import json
@@ -25,9 +25,10 @@ from src.pik2video.application.editor.managers.preset_manager import PresetManag
 from src.pik2video.application.editor.managers.timeline_manager import TimelineManager
 from src.pik2video.application.editor.managers.export_settings import ExportSettings
 from src.pik2video.application.editor.managers.media_manager import MediaManager
+from src.pik2video.application.editor.managers.playback_manager import PlaybackManager
+from src.pik2video.application.editor.managers.persistence import Persistence
 
 logger = logging.getLogger(__name__)
-
 
 
 class EditorState(QObject):
@@ -59,10 +60,9 @@ class EditorState(QObject):
 
     # ── Трим ──
     trim_changed = Signal(float, float)
-
-    audio_trim_changed = Signal(float, float)   # отдельный сигнал для трима аудио
-    audio_format_changed = Signal(str)           # смена аудио-формата экспорта
-    crop_rect_changed = Signal(tuple)            # изменилась рабочая зона (x, y, w, h)
+    audio_trim_changed = Signal(float, float)
+    audio_format_changed = Signal(str)
+    crop_rect_changed = Signal(tuple)
 
     # ── Экспорт ──
     exporting_started = Signal()
@@ -72,12 +72,12 @@ class EditorState(QObject):
     video_volume_changed = Signal(float)
     audio_volume_changed = Signal(float)
 
-    audio_offset_changed = Signal(float)     # сдвиг аудио-дорожки (сек)
-    video_offset_changed = Signal(float)     # сдвиг видео-дорожки (сек)
+    audio_offset_changed = Signal(float)
+    video_offset_changed = Signal(float)
 
-    video_limit_reached = Signal()           # попытка добавить >3 видео
-    linked_mode_changed = Signal(bool)       # режим связки видео+аудио переключён
-    timeline_markers_changed = Signal()      # изменение меток на дорожке таймлайна
+    video_limit_reached = Signal()
+    linked_mode_changed = Signal(bool)
+    timeline_markers_changed = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -85,32 +85,18 @@ class EditorState(QObject):
         # Общий словарь имён экспорта (видео + аудио). MediaManager берёт ссылку.
         self._preferred_names: dict[str, str] = {}
 
-        # Менеджер пресетов кадра (пресет, зум, offset_x, crop_rect, метки зума)
+        # Менеджеры
         self._presets = PresetManager(self)
-        # Менеджер таймлайна (метки [, ], ][ + cut/visible + конвертации)
         self._timeline = TimelineManager(self)
-        # Настройки экспорта (формат, разрешение, битрейт, скорость, путь, состояние)
         self._export_settings = ExportSettings(self)
-        # Менеджер медиа (видео: файлы, длительности, тримы, имена экспорта)
         self._media = MediaManager(self)
+        self._playback = PlaybackManager(self)
 
-        # Воспроизведение
-        self._position: float = 0.0
-
-        self._video_volume: float = 1.0         # громкость видео-плеера 0.0 … 1.0
-        self._audio_volume: float = 1.0         # громкость аудио-плеера 0.0 … 1.0
-
-        self._audio_offset: float = 0.0         # сдвиг аудио-дорожки (сек)
-        self._video_offset: float = 0.0         # сдвиг видео-дорожки (сек)
-
-        self._linked_mode: bool = True          # видео+аудио связаны (плеер играет оба)
-
-        # ── Персистентность списка файлов ──
-        self._persist_path = Path.home() / ".pik2video" / "editor_files.json"
-        self._loading = False
+        # ── Персистентность ──
+        self._persistence = Persistence(self)
         self.videos_changed.connect(self._save_files)
 
-    # ── Список видео (делегаты в MediaManager) ──
+    # ── Media (делегаты в MediaManager) ──
 
     def add_video_file(self, path: str, duration: float = 0.0, preferred_name: str = ""):
         self._media.add_video_file(path, duration, preferred_name)
@@ -157,6 +143,24 @@ class EditorState(QObject):
     def update_active_duration(self, seconds: float):
         self._media.update_active_duration(seconds)
 
+    def set_trim(self, start: float, end: float):
+        self._media.set_trim(start, end)
+
+    def commit_trim(self):
+        self._media.commit_trim()
+
+    def get_trim(self) -> tuple:
+        return self._media.get_trim()
+
+    def get_trim_for(self, path: str) -> tuple:
+        return self._media.get_trim_for(path)
+
+    def get_export_filename(self) -> str:
+        return self._media.get_export_filename()
+
+    def set_export_filename(self, name: str):
+        self._media.set_export_filename(name)
+
     # ── Аудио (делегаты в MediaManager) ──
 
     def set_audio_file(self, path: str, duration: float = 0.0):
@@ -198,65 +202,7 @@ class EditorState(QObject):
     def get_audio_format(self) -> str:
         return self._media.get_audio_format()
 
-    # ── Воспроизведение ──
-
-    def set_position(self, seconds: float):
-        if self._position != seconds:
-            self._position = seconds
-            self.position_changed.emit(seconds)
-
-    def get_position(self) -> float:
-        return self._position
-
-    # ── Трим (для активного файла) — делегаты в MediaManager ──
-
-    def set_trim(self, start: float, end: float):
-        self._media.set_trim(start, end)
-
-    def commit_trim(self):
-        self._media.commit_trim()
-
-    def get_trim(self) -> tuple:
-        return self._media.get_trim()
-
-    def get_trim_for(self, path: str) -> tuple:
-        return self._media.get_trim_for(path)
-
-    def get_format(self) -> str:
-        return self._export_settings.get_format()
-
-    def set_format(self, fmt: str):
-        self._export_settings.set_format(fmt)
-
-    def get_resolution(self) -> str:
-        return self._export_settings.get_resolution()
-
-    def set_resolution(self, value: str):
-        self._export_settings.set_resolution(value)
-
-    def set_source_resolution(self, width: int, height: int):
-        self._presets.set_source_resolution(width, height)
-
-    def get_source_resolution(self) -> tuple:
-        return self._presets.get_source_resolution()
-
-    def get_bitrate_mode(self) -> str:
-        return self._export_settings.get_bitrate_mode()
-
-    def get_bitrate_value(self) -> str:
-        return self._export_settings.get_bitrate_value()
-
-    def set_bitrate(self, mode: str, value: str):
-        self._export_settings.set_bitrate(mode, value)
-
-    def get_rotation(self) -> int:
-        return self._export_settings.get_rotation()
-
-    def set_rotation(self, angle: int):
-        self._export_settings.set_rotation(angle)
-
-    def get_speed(self) -> float:
-        return self._export_settings.get_speed()
+    # ── Preset (делегаты в PresetManager) ──
 
     def get_aspect_preset(self) -> str:
         return self._presets.get_aspect_preset()
@@ -288,86 +234,11 @@ class EditorState(QObject):
     def compute_crop_for(self, zoom: int, offset_x: float) -> tuple:
         return self._presets.compute_crop_for(zoom, offset_x)
 
-    def set_speed(self, value: float):
-        self._export_settings.set_speed(value)
+    def set_source_resolution(self, width: int, height: int):
+        self._presets.set_source_resolution(width, height)
 
-    def get_export_filename(self) -> str:
-        return self._media.get_export_filename()
-
-    def set_export_filename(self, name: str):
-        self._media.set_export_filename(name)
-
-    def get_video_volume(self) -> float:
-        return self._video_volume
-
-    def get_audio_volume(self) -> float:
-        return self._audio_volume
-
-    def set_video_volume(self, value: float):
-        value = max(0.0, min(1.0, value))
-        if self._video_volume == value:
-            return
-        self._video_volume = value
-        self._save_files()
-        self.video_volume_changed.emit(value)
-
-    def set_audio_volume(self, value: float):
-        value = max(0.0, min(1.0, value))
-        if self._audio_volume == value:
-            return
-        self._audio_volume = value
-        self._save_files()
-        self.audio_volume_changed.emit(value)
-
-    def get_audio_offset(self) -> float:
-        return self._audio_offset
-
-    def get_video_offset(self) -> float:
-        return self._video_offset
-
-    def set_audio_offset(self, value: float):
-        value = max(0.0, value)
-        if self._audio_offset == value:
-            return
-        self._audio_offset = value
-        self._save_files()
-        self.audio_offset_changed.emit(value)
-
-    def set_video_offset(self, value: float):
-        value = max(0.0, value)
-        if self._video_offset == value:
-            return
-        self._video_offset = value
-        self._save_files()
-        self.video_offset_changed.emit(value)
-
-    def get_linked_mode(self) -> bool:
-        return self._linked_mode
-
-    def set_linked_mode(self, value: bool):
-        value = bool(value)
-        if self._linked_mode == value:
-            return
-        self._linked_mode = value
-        self._save_files()
-        self.linked_mode_changed.emit(value)
-
-    def get_export_path(self) -> str:
-        return self._export_settings.get_export_path()
-
-    def set_export_path(self, path: str):
-        self._export_settings.set_export_path(path)
-
-    # ── Экспорт ──
-
-    def start_exporting(self):
-        self._export_settings.start_exporting()
-
-    def finish_exporting(self, success: bool):
-        self._export_settings.finish_exporting(success)
-
-    def is_exporting(self) -> bool:
-        return self._export_settings.is_exporting()
+    def get_source_resolution(self) -> tuple:
+        return self._presets.get_source_resolution()
 
     def add_marker(self, time_sec: float, offset_x: float, zoom: int = 0):
         self._presets.add_marker(time_sec, offset_x, zoom)
@@ -387,7 +258,95 @@ class EditorState(QObject):
     def remove_marker(self, time_sec: float) -> tuple:
         return self._presets.remove_marker(time_sec)
 
-    # ── Метки таймлайна ([, ], ][) — делегаты в TimelineManager ──
+    # ── ExportSettings (делегаты в ExportSettings) ──
+
+    def get_format(self) -> str:
+        return self._export_settings.get_format()
+
+    def set_format(self, fmt: str):
+        self._export_settings.set_format(fmt)
+
+    def get_resolution(self) -> str:
+        return self._export_settings.get_resolution()
+
+    def set_resolution(self, value: str):
+        self._export_settings.set_resolution(value)
+
+    def get_bitrate_mode(self) -> str:
+        return self._export_settings.get_bitrate_mode()
+
+    def get_bitrate_value(self) -> str:
+        return self._export_settings.get_bitrate_value()
+
+    def set_bitrate(self, mode: str, value: str):
+        self._export_settings.set_bitrate(mode, value)
+
+    def get_rotation(self) -> int:
+        return self._export_settings.get_rotation()
+
+    def set_rotation(self, angle: int):
+        self._export_settings.set_rotation(angle)
+
+    def get_speed(self) -> float:
+        return self._export_settings.get_speed()
+
+    def set_speed(self, value: float):
+        self._export_settings.set_speed(value)
+
+    def get_export_path(self) -> str:
+        return self._export_settings.get_export_path()
+
+    def set_export_path(self, path: str):
+        self._export_settings.set_export_path(path)
+
+    def start_exporting(self):
+        self._export_settings.start_exporting()
+
+    def finish_exporting(self, success: bool):
+        self._export_settings.finish_exporting(success)
+
+    def is_exporting(self) -> bool:
+        return self._export_settings.is_exporting()
+
+    # ── Playback (делегаты в PlaybackManager) ──
+
+    def set_position(self, seconds: float):
+        self._playback.set_position(seconds)
+
+    def get_position(self) -> float:
+        return self._playback.get_position()
+
+    def get_video_volume(self) -> float:
+        return self._playback.get_video_volume()
+
+    def get_audio_volume(self) -> float:
+        return self._playback.get_audio_volume()
+
+    def set_video_volume(self, value: float):
+        self._playback.set_video_volume(value)
+
+    def set_audio_volume(self, value: float):
+        self._playback.set_audio_volume(value)
+
+    def get_audio_offset(self) -> float:
+        return self._playback.get_audio_offset()
+
+    def get_video_offset(self) -> float:
+        return self._playback.get_video_offset()
+
+    def set_audio_offset(self, value: float):
+        self._playback.set_audio_offset(value)
+
+    def set_video_offset(self, value: float):
+        self._playback.set_video_offset(value)
+
+    def get_linked_mode(self) -> bool:
+        return self._playback.get_linked_mode()
+
+    def set_linked_mode(self, value: bool):
+        self._playback.set_linked_mode(value)
+
+    # ── Timeline: метки таймлайна (делегаты в TimelineManager) ──
 
     def add_timeline_marker(self, time_sec: float, kind: str) -> bool:
         return self._timeline.add_timeline_marker(time_sec, kind)
@@ -404,7 +363,7 @@ class EditorState(QObject):
     def clear_timeline_markers(self, path: Optional[str] = None):
         return self._timeline.clear_timeline_markers(path)
 
-    # ── Cut / visible / конвертации — делегаты в TimelineManager ──
+    # ── Timeline: cut / visible / конвертации (делегаты в TimelineManager) ──
 
     def get_cut_intervals(self, path: Optional[str] = None) -> list:
         return self._timeline.get_cut_intervals(path)
@@ -439,89 +398,12 @@ class EditorState(QObject):
     def next_visible_time(self, time_sec: float, path: Optional[str] = None) -> float:
         return self._timeline.next_visible_time(time_sec, path)
 
+    # ── Персистентность ──
+
     def _save_files(self):
-        """Сохранить список файлов и имена экспорта в JSON."""
-        if self._loading:
-            return
-        try:
-            self._persist_path.parent.mkdir(parents=True, exist_ok=True)
-            data = {
-                "files": self._media.get_video_files_list(),
-                "active_index": self._media.get_active_index_for_save(),
-                "preferred_names": dict(self._preferred_names),
-                "video_trims": self._media.get_trims_dict(),
-                # Аудио-состояние через MediaManager
-                **self._media.get_audio_state_dict(),
-                "video_volume": self._video_volume,                # громкость видео-плеера
-                "audio_volume": self._audio_volume,                # громкость аудио-плеера
-                "audio_offset": self._audio_offset,                # сдвиг аудио-дорожки
-                "video_offset": self._video_offset,                # сдвиг видео-дорожки
-                "linked_mode": self._linked_mode,                  # видео+аудио связаны
-                "offset_x": self._presets.get_offset_x_for_save(),                        # сдвиг рамки кадра от центра
-                "markers": self._presets.get_markers_dict(),  # метки ключевых кадров (пресеты)
-                "timeline_markers": self._timeline.get_timeline_markers_dict(),
-                "hidden_cuts": self._timeline.get_hidden_cuts_dict(),
-            }
-            with open(self._persist_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.warning(f"Не удалось сохранить список файлов: {e}")
+        """Делегат в Persistence."""
+        self._persistence.save()
 
     def load_persisted_files(self):
-        """Загрузить сохранённый список файлов при старте редактора."""
-        if not self._persist_path.exists():
-            return
-
-        try:
-            with open(self._persist_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception as e:
-            logger.warning(f"Не удалось прочитать список файлов: {e}")
-            return
-
-        saved_names = data.get("preferred_names", {})
-        saved_trims = data.get("video_trims", {})           # тримы каждого видео из прошлого запуска
-        saved_audio = data.get("audio_path", "")            # путь к сохранённому аудиофайлу
-
-        self._video_volume = max(0.0, min(1.0, float(data.get("video_volume", 1.0))))
-        self._audio_volume = max(0.0, min(1.0, float(data.get("audio_volume", 1.0))))
-        self._audio_offset = max(0.0, float(data.get("audio_offset", 0.0)))
-        self._video_offset = max(0.0, float(data.get("video_offset", 0.0)))
-        self._linked_mode = bool(data.get("linked_mode", True))
-        self._presets.set_offset_x_from_load(float(data.get("offset_x", 0.0)))
-        markers_raw = data.get("markers", {})
-        self._presets.load_markers(markers_raw)
-
-        # Восстановление меток таймлайна и скрытых cut — через TimelineManager
-        self._timeline.load_hidden_cuts(data.get("hidden_cuts", {}))
-        self._timeline.load_timeline_markers(data.get("timeline_markers", {}))
-
-        self._loading = True
-        try:
-            # Восстановление видео — через MediaManager
-            self._media.load_video_files(
-                files=data.get("files", []),
-                active_index=data.get("active_index", -1),
-                saved_trims=saved_trims,
-                saved_names=saved_names,
-            )
-
-            # Эмит сигналов — если видео восстановлены
-            if self._media.has_videos():
-                active_path = self._media.get_video_path()
-                self.videos_changed.emit()
-                self.active_video_changed.emit(active_path)
-                self.video_loaded.emit(active_path)
-                self.trim_changed.emit(*self._media.get_trim())
-                logger.info(f"Восстановлено видео: {len(self._media.get_video_files())}")
-
-            # Восстановление аудио — через MediaManager
-            if self._media.load_audio_state(data):
-                audio_path = self._media.get_audio_path()
-                audio_trim = self._media.get_audio_trim()
-                self.audio_loaded.emit(audio_path)
-                self.audio_trim_changed.emit(*audio_trim)
-                logger.info(f"Восстановлено аудио: {audio_path}, метки {audio_trim}")
-
-        finally:
-            self._loading = False
+        """Делегат в Persistence."""
+        self._persistence.load()
