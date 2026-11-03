@@ -181,6 +181,10 @@ class PlayerWidget(PlayerUI):
 
         logger.debug(f"[SET-MODE] done: {mode}")
 
+    def play_until_first_frame(self, timeout_ms: int = 1500):
+        """Play → pause после первого кадра (для показа превью)."""
+        self.engine.play_until_first_frame(timeout_ms)
+
     def set_position(self, seconds: float):
         self.engine.seek(seconds)
 

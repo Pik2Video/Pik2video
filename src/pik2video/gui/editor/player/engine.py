@@ -57,6 +57,7 @@ class PlayerEngine(QObject):
         self._video_volume = 1.0
         self._audio_volume = 1.0
         self._video_fps = DEFAULT_FPS
+        self._pause_on_next_frame = False   # play → pause после 1-го кадра
         self._loop_start_resolver = None   # fn(default_sec) -> start_sec для loop
 
     # ── API ──
@@ -139,6 +140,32 @@ class PlayerEngine(QObject):
     def has_audio(self) -> bool:
         return self._audio_player.source().isValid()
 
+    def play_until_first_frame(self, timeout_ms: int = 1500):
+        """Play → pause сразу после первого кадра. Для показа превью.
+
+        Работает и на «холодном» плеере (первый запуск), и на «тёплом»
+        (переключение между файлами). Пауза ставится ровно на 1-м кадре —
+        никакого «перелистывания».
+        """
+        if not self.has_video():
+            return
+        self._pause_on_next_frame = True
+        try:
+            self._player.play()
+        except RuntimeError:
+            self._pause_on_next_frame = False
+            return
+        # Fallback: если кадр так и не пришёл (битый файл) — пауза по таймауту
+        QTimer.singleShot(timeout_ms, self._fallback_pause_if_waiting)
+
+    def _fallback_pause_if_waiting(self):
+        if self._pause_on_next_frame:
+            self._pause_on_next_frame = False
+            try:
+                self._player.pause()
+            except RuntimeError:
+                pass
+
     def get_position(self) -> float:
         return self._active_player().position() / 1000.0
 
@@ -204,6 +231,14 @@ class PlayerEngine(QObject):
         image = frame.toImage()
         if not image.isNull():
             self.video_frame_ready.emit(image)
+
+        # Если ждём первый кадр — сразу пауза (ровно 1 кадр, без «перелистывания»)
+        if self._pause_on_next_frame:
+            self._pause_on_next_frame = False
+            try:
+                self._player.pause()
+            except RuntimeError:
+                pass
 
     def _on_position_changed(self, ms: int):
         if self._mode != "video":

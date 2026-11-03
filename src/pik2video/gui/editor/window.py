@@ -49,7 +49,7 @@ from .record_menu import RecordMenuController
 from .state import EditorState
 from .timeline import TimelineWidget as NewTimeline, FramePreview
 from .timeline.marker_menu import MarkerMenu
-from .thumbnail_loader import ThumbnailLoader
+from src.pik2video.storage.thumbnail_loader import ThumbnailLoader
 from .panels import ToolsPanel
 from .panels import TopBar
 
@@ -482,6 +482,9 @@ class EditorWindow(QMainWindow):
         self.multiplexer.set_mode("video")                    # плеер в режим видео
         self.multiplexer.load_video(path)
         self._pending_jump_to_start = True                    # прыжок — после durationChanged
+        # Fallback: если durationChanged уже прошёл до _on_video_loaded —
+        # сигнала больше не будет, запускаем прыжок по таймеру.
+        QTimer.singleShot(300, self._do_jump_to_start)
         self._refresh_timeline_keyframes()                    # подтягиваем метки для нового файла
         if self.crop_mode.is_active():                        # режим пресетов уже открыт — обновить оверлей
             self.multiplexer.set_preset_visible(True)
@@ -619,10 +622,33 @@ class EditorWindow(QMainWindow):
 
         # Отложенный прыжок: Qt готов (duration пришла) → setPosition не блокирует.
         if self._pending_jump_to_start:
-            self._pending_jump_to_start = False
-            visible = self.state.get_visible_intervals()
-            target = visible[0][0] if visible else 0.0
-            self.multiplexer.set_position(target)
+            self._do_jump_to_start()
+
+    def _do_jump_to_start(self):
+        """Прыжок на начало видимого + запрос первого кадра.
+
+        Идемпотентно — вызывается и из _on_duration_changed, и из таймера.
+        """
+        if not self._pending_jump_to_start:
+            return
+        self._pending_jump_to_start = False
+        visible = self.state.get_visible_intervals()
+        target = visible[0][0] if visible else 0.0
+        self.multiplexer.set_position(target)
+        QTimer.singleShot(80, self._request_first_frame)
+
+    def _request_first_frame(self):
+        """Запросить первый кадр у QMediaPlayer.
+
+        Через play_until_first_frame: play → pause после первого кадра.
+        Работает и на «холодном» плеере (старт), и на «тёплом» (переключение).
+        setPosition(0) при позиции 0 QMediaPlayer игнорирует — кадр не появится.
+        """
+        try:
+            if not self.multiplexer.engine.is_playing():
+                self.multiplexer.play_until_first_frame(timeout_ms=1500)
+        except RuntimeError:
+            pass
 
     def _on_audio_duration_changed(self, seconds: float):
         """Плеер сообщил длительность аудио → обновляем аудио-таймлайн и EditorState."""
