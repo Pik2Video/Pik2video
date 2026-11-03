@@ -95,6 +95,9 @@ class PlayerManager(QObject):
     def set_loop(self, enabled: bool):
         self._loop_enabled = enabled
 
+    def is_loop_enabled(self) -> bool:
+        return self._loop_enabled
+
     def set_loop_start_resolver(self, fn):
         """fn(default_start_sec) -> start_sec. Вызывается при loop."""
         self._loop_start_resolver = fn

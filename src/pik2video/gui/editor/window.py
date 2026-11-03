@@ -110,13 +110,13 @@ class EditorWindow(QMainWindow):
             player_manager=self.multiplexer.engine,
             parent=self,
         )
+        # Резолверы для play / ⏮ (координатор — бизнес, widget — UI)
+        self.multiplexer.set_pre_play_resolver(self._coordinator.resolve_pre_play)
+        self.multiplexer.set_start_resolver(self._coordinator.resolve_start)
 
         # ── Контроллеры (после _build_ui — им нужен top_bar) ──
         self._export_saved_path = None                              # путь к файлу, который был в плеере до экспорта
         self._marker_mode_active = False                             # режим сдвига рамки (перо/маркер)
-        self._skip_cut_in_progress = False                           # защита от рекурсии при перескоке cut
-        self._pending_jump_to_start = False                          # прыжок на start — после durationChanged
-        self._cut_stopped_at = None                                  # позиция, где плеер уже остановлен по cut
         self._was_playing_before_marker_drag = False                 # для drag метки
         self._active_kind = "video"                                  # какой файл активен: "video" | "audio"
         self._marker_menu = None                                     # всплывающее меню инструментов метки
@@ -235,8 +235,6 @@ class EditorWindow(QMainWindow):
         self.multiplexer = PlayerWidget()
         self.multiplexer.setMinimumHeight(200)
         # Resolver'ы для учёта cut-зон при play/loop/⏮
-        self.multiplexer.set_pre_play_resolver(self._resolve_pre_play)
-        self.multiplexer.set_start_resolver(self._resolve_start)
         mx_layout.addWidget(self.multiplexer, stretch=1)
 
         # ── Зона таймлайнов с общим ползунком ──
@@ -294,9 +292,9 @@ class EditorWindow(QMainWindow):
 
         # ── Плеер → EditorState ──
         self.multiplexer.position_changed.connect(self.state.set_position)
-        self.multiplexer.position_changed.connect(self._on_player_position_changed)
-        self.multiplexer.duration_changed.connect(self._on_duration_changed)
-        self.multiplexer.audio_duration_changed.connect(self._on_audio_duration_changed)   # длительность аудио
+        # координатор сам подписан на position_changed (в своём __init__)
+        self.multiplexer.duration_changed.connect(self._on_duration_changed_ui)
+        self.multiplexer.audio_duration_changed.connect(self._on_audio_duration_changed_ui)   # длительность аудио
         self.multiplexer.speed_changed.connect(self.state.set_speed)                       # скорость плеера → экспорт
         self.multiplexer.video_volume_changed.connect(self.state.set_video_volume)         # громкость видео → сохранение
         self.multiplexer.audio_volume_changed.connect(self.state.set_audio_volume)         # громкость аудио → сохранение
@@ -489,10 +487,7 @@ class EditorWindow(QMainWindow):
         """EditorState сообщил, что активный файл сменился → отдаём плееру."""
         self.multiplexer.set_mode("video")                    # плеер в режим видео
         self.multiplexer.load_video(path)
-        self._pending_jump_to_start = True                    # прыжок — после durationChanged
-        # Fallback: если durationChanged уже прошёл до _on_video_loaded —
-        # сигнала больше не будет, запускаем прыжок по таймеру.
-        QTimer.singleShot(300, self._do_jump_to_start)
+        self._coordinator.on_video_loaded()                   # jump to start + первый кадр
         self._refresh_timeline_keyframes()                    # подтягиваем метки для нового файла
         if self.crop_mode.is_active():                        # режим пресетов уже открыт — обновить оверлей
             self.multiplexer.set_preset_visible(True)
@@ -618,50 +613,26 @@ class EditorWindow(QMainWindow):
             self.multiplexer.set_position(a_start)
         self._export_saved_path = None
 
-    def _on_duration_changed(self, seconds: float):
-        """Плеер сообщил длительность видео → обновляем таймлайн + отложенный прыжок."""
+    def _on_duration_changed_ui(self, seconds: float):
+        """UI-реакция на duration_changed.
+
+        Бизнес-часть (update_active_duration, jump) — в EditorCoordinator.
+        Здесь — только обновление таймлайна.
+        """
         if self.state.has_videos():
-            self.state.update_active_duration(seconds)
             idx = self.state.get_active_index()
             if idx >= 0:
                 self.timeline.set_track_duration(idx, seconds)
             if self.state.has_audio() and self.state.get_audio_duration() > 0:
                 self.timeline.set_audio_duration(self.state.get_audio_duration())
 
-        # Отложенный прыжок: Qt готов (duration пришла) → setPosition не блокирует.
-        if self._pending_jump_to_start:
-            self._do_jump_to_start()
+    def _on_audio_duration_changed_ui(self, seconds: float):
+        """UI-реакция на duration_changed аудио.
 
-    def _do_jump_to_start(self):
-        """Прыжок на начало видимого + запрос первого кадра.
-
-        Идемпотентно — вызывается и из _on_duration_changed, и из таймера.
+        Бизнес (state.set_audio_duration) — в EditorCoordinator.
+        Здесь — только обновление таймлайна.
         """
-        if not self._pending_jump_to_start:
-            return
-        self._pending_jump_to_start = False
-        visible = self.state.get_visible_intervals()
-        target = visible[0][0] if visible else 0.0
-        self.multiplexer.set_position(target)
-        QTimer.singleShot(80, self._request_first_frame)
-
-    def _request_first_frame(self):
-        """Запросить первый кадр у QMediaPlayer.
-
-        Через play_until_first_frame: play → pause после первого кадра.
-        Работает и на «холодном» плеере (старт), и на «тёплом» (переключение).
-        setPosition(0) при позиции 0 QMediaPlayer игнорирует — кадр не появится.
-        """
-        try:
-            if not self.multiplexer.engine.is_playing():
-                self.multiplexer.play_until_first_frame(timeout_ms=1500)
-        except RuntimeError:
-            pass
-
-    def _on_audio_duration_changed(self, seconds: float):
-        """Плеер сообщил длительность аудио → обновляем аудио-таймлайн и EditorState."""
         if self.state.has_audio():
-            self.state.set_audio_duration(seconds)               # длительность аудио
             self.timeline.set_audio_duration(seconds)
 
     def _on_videos_changed(self):
@@ -794,7 +765,6 @@ class EditorWindow(QMainWindow):
 
     def _on_marker_drag_started(self, path: str, time_sec: float):
         """Начали тащить метку: пауза + позиционируем плеер на метку."""
-        self._cut_stopped_at = None   # сброс флага остановки
         logger.info(f"[MARKER-DRAG-START] {Path(path).name} @ {time_sec:.2f}с")
         self._was_playing_before_marker_drag = self.multiplexer.engine.is_playing()
         if self._was_playing_before_marker_drag:
@@ -842,7 +812,6 @@ class EditorWindow(QMainWindow):
 
     def _on_scrub_started(self):
         """Начало drag по скрабберу: пауза плеера + кэш кадров."""
-        self._cut_stopped_at = None   # пользователь тащит playhead — сброс
         self._was_playing_before_drag = self.multiplexer.begin_trim_drag()
         self.multiplexer.set_keep_frames(True)
         # Если drag не случится (клик без движения) — позиция не должна меняться
@@ -1011,7 +980,7 @@ class EditorWindow(QMainWindow):
         self.drop_area.set_video_active(self.state.get_active_index())
         self._sync_export_name_field()
         self.timeline.set_active_video(self.state.get_active_index())
-        # Прыжок делает _on_video_loaded (через _pending_jump_to_start → durationChanged).
+        # Прыжок делает _on_video_loaded (через coordinator.on_video_loaded).
         # Здесь не дублируем: иначе два прыжка подряд.
 
     def load_file(self, path: str, preferred_name: str = "") -> bool:
@@ -1133,129 +1102,6 @@ class EditorWindow(QMainWindow):
         sw, _ = self.state.get_source_resolution()
         step = sw * 0.05
         self.state.set_offset_x(self.state.get_offset_x() + step)
-
-    def _first_visible_start(self, default: float) -> float:
-        """Начало первого видимого интервала. default — если меток нет."""
-        visible = self.state.get_visible_intervals()
-        if not visible:
-            return default
-        return visible[0][0]
-
-    def _resolve_pre_play(self, current_sec: float):
-        """Перед play: скорректировать стартовую позицию.
-
-        Случаи:
-        - позиция в cut → перескок на следующий видимый (или начало)
-        - позиция на КОНЦЕ видимого интервала (в пределах 0.1с) → к началу
-        - позиция в середине видимого → не двигаем (играем как есть)
-        """
-        # Сбрасываем флаг «уже остановлены» — пользователь явно хочет играть
-        self._cut_stopped_at = None
-
-        visible = self.state.get_visible_intervals()
-        if not visible:
-            return None
-
-        # Если в cut → к следующему видимому или к началу
-        if not self.state.is_time_visible(current_sec):
-            next_t = self.state.next_visible_time(current_sec)
-            if abs(next_t - current_sec) < 0.01:
-                return visible[0][0]
-            return next_t
-
-        # В видимой зоне — проверяем, не в самом ли конце
-        for start, end in visible:
-            if start <= current_sec <= end:
-                if current_sec >= end - 0.1:
-                    # На конце видимого → к началу первого видимого
-                    return visible[0][0]
-                # В середине видимого — не двигаем
-                return None
-
-        return None
-
-    def _resolve_start(self, default_sec: float) -> float:
-        """Кнопка ⏮ и loop: всегда к началу первого видимого."""
-        self._cut_stopped_at = None   # сброс флага
-        visible = self.state.get_visible_intervals()
-        result = visible[0][0] if visible else default_sec
-        logger.debug(
-            f"[RESOLVE-START] default={default_sec:.2f} visible={visible} → {result:.2f}"
-        )
-        return result
-
-    def _on_player_position_changed(self, seconds: float):
-        """Движение ползунка: перескок/loop через cut + сдвиг рамки по меткам зума."""
-        if self.multiplexer.engine.suppress_cut_skip:
-            return
-
-        # ── 1. Перескок / loop на cut-участках ──
-        # Только при воспроизведении. При ручном drag пользователь свободен.
-        if (not self._skip_cut_in_progress
-                and self.multiplexer.engine.is_playing()):
-            if not self.state.is_time_visible(seconds):
-                next_time = self.state.next_visible_time(seconds)
-
-                if abs(next_time - seconds) < 0.01:
-                    # Хвостовой cut — нет видимого после
-                    visible = self.state.get_visible_intervals()
-                    if not visible:
-                        return
-
-                    # Защита от повторного срабатывания на той же позиции
-                    if (self._cut_stopped_at is not None
-                            and abs(self._cut_stopped_at - seconds) < 0.5):
-                        return
-
-                    if self.multiplexer.is_loop_enabled():
-                        # Loop → на начало первого видимого
-                        loop_start = self._resolve_start(0.0)
-                        logger.debug(
-                            f"[CUT-LOOP] {seconds:.2f} → {loop_start:.2f}"
-                        )
-                        self._skip_cut_in_progress = True
-                        try:
-                            self.multiplexer.set_position(loop_start)
-                        finally:
-                            self._skip_cut_in_progress = False
-                    else:
-                        # Пауза на конце последнего видимого
-                        last_end = visible[-1][1]
-                        logger.debug(
-                            f"[CUT-STOP] {seconds:.2f}: пауза на {last_end:.2f}"
-                        )
-                        self._skip_cut_in_progress = True
-                        self._cut_stopped_at = last_end   # запоминаем
-                        try:
-                            # Сначала pause — останавливаем поток positionChanged
-                            self.multiplexer.engine.pause()
-                            # Потом сдвигаем на конец видимого
-                            self.multiplexer.set_position(last_end)
-                        finally:
-                            self._skip_cut_in_progress = False
-                    return
-
-                # Есть следующий видимый → перескок
-                logger.debug(f"[CUT-SKIP] {seconds:.2f} → {next_time:.2f}")
-                self._skip_cut_in_progress = True
-                try:
-                    self.multiplexer.set_position(next_time)
-                finally:
-                    self._skip_cut_in_progress = False
-                return
-
-        # ── 2. Динамический сдвиг рамки по меткам зума ──
-        if self._marker_mode_active:
-            return
-
-        markers = self.state.get_markers()
-        if not markers:
-            self.state.set_offset_x(0.0, save=False)
-            return
-
-        active_offset, active_zoom = self.state.get_marker_state_at(seconds)
-        self.state.set_offset_x(active_offset, save=False)
-        self.state.set_aspect_zoom(active_zoom, save=False)
 
     def _on_marker_mode_toggled(self, active: bool):
         self._marker_mode_active = active
