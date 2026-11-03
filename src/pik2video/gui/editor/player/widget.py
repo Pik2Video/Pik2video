@@ -8,7 +8,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QWidget
 
 from .ui import PlayerUI
-from .engine import PlayerEngine
+from src.pik2video.application.editor.managers.player_manager import PlayerManager
 from .surface import PresetFrame
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class PlayerWidget(PlayerUI):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.engine = PlayerEngine(self)
+        self.engine = PlayerManager(self)
         self._last_frame = None
         self._keep_frames = True
         self._last_source_resolution = (0, 0)
