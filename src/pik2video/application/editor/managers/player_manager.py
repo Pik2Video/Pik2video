@@ -78,6 +78,8 @@ class PlayerManager(QObject):
         self._video_fps = DEFAULT_FPS
         self._pause_on_next_frame = False       # play → pause после 1-го кадра
         self.suppress_cut_skip = False          # блокировать cut-skip во время внутренних seek
+        self._restore_volume_after = None       # сохранить громкость на время play_until_first_frame
+        self._restore_rate_after = None         # сохранить playbackRate на время play_until_first_frame
         self._loop_start_resolver = None        # fn(default_sec) -> start_sec
 
     # ── API ──
@@ -159,20 +161,28 @@ class PlayerManager(QObject):
     def has_audio(self) -> bool:
         return self._audio_player.source().isValid()
 
-    def play_until_first_frame(self, timeout_ms: int = 1500):
+    def play_until_first_frame(self, timeout_ms: int = 500):
         """Play → pause сразу после первого кадра. Для показа превью.
 
-        Работает и на «холодном» плеере (старт), и на «тёплом» (переключение).
-        Пауза — ровно на 1-м кадре, без «перелистывания».
-        Fallback: если кадр не пришёл за timeout_ms — пауза по таймеру.
+        Звук глушится на время показа (иначе слышно «мгновенное воспроизведение»).
+        Пауза — ровно на 1-м кадре (быстрый старт), fallback — по таймеру 500мс
+        (4K/битый файл). На 4K окно «мелькания» до 500мс, но без звука.
         """
         if not self.has_video():
             return
         self._pause_on_next_frame = True
+        # Скорость 0.01x: кадр почти не сдвигается за время ожидания.
+        # Мелькания нет. Звука тоже (0.5мс аудио = тишина).
+        self._restore_rate_after = self._player.playbackRate()
+        try:
+            self._player.setPlaybackRate(0.01)
+        except RuntimeError:
+            self._restore_rate_after = None
         try:
             self._player.play()
         except RuntimeError:
             self._pause_on_next_frame = False
+            self._restore_rate_now()
             return
         QTimer.singleShot(timeout_ms, self._fallback_pause_if_waiting)
 
@@ -183,6 +193,16 @@ class PlayerManager(QObject):
                 self._player.pause()
             except RuntimeError:
                 pass
+            self._restore_rate_now()
+
+    def _restore_rate_now(self):
+        """Восстановить playbackRate после play_until_first_frame."""
+        if self._restore_rate_after is not None:
+            try:
+                self._player.setPlaybackRate(self._restore_rate_after)
+            except RuntimeError:
+                pass
+            self._restore_rate_after = None
 
     def get_position(self) -> float:
         return self._active_player().position() / 1000.0
@@ -250,13 +270,14 @@ class PlayerManager(QObject):
         if not image.isNull():
             self.video_frame_ready.emit(image)
 
-        # Ждём первый кадр → пауза (ровно 1 кадр, без «перелистывания»)
+        # Ждём первый кадр → пауза + восстановление скорости
         if self._pause_on_next_frame:
             self._pause_on_next_frame = False
             try:
                 self._player.pause()
             except RuntimeError:
                 pass
+            self._restore_rate_now()
 
     def _on_position_changed(self, ms: int):
         if self._mode != "video":

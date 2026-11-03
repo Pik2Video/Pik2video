@@ -55,6 +55,9 @@ class EditorCoordinator(QObject):
         """Плеер сообщил длительность видео."""
         if self.state.has_videos():
             self.state.update_active_duration(seconds)
+            # duration нужна для cut-интервалов (get_cut_intervals → [] при 0).
+            # Эмитим signal — timeline._refresh_markers пересчитает cut и перерисует.
+            self.state.timeline_markers_changed.emit()
 
         if self._pending_jump_to_start:
             self._do_jump_to_start()
@@ -76,12 +79,20 @@ class EditorCoordinator(QObject):
         QTimer.singleShot(300, self._do_jump_to_start)
 
     def _do_jump_to_start(self):
-        """Идемпотентно: прыжок на first_visible + запрос первого кадра."""
+        """Идемпотентно: прыжок на first_visible + запрос первого кадра.
+
+        Не сбрасываем флаг, если duration ещё 0: PlayerManager.seek вернётся
+        без эффекта. On_duration_changed повторит вызов, когда duration придёт.
+        """
         if not self._pending_jump_to_start:
+            return
+        # duration ещё не пришла — ждём on_duration_changed
+        if self.player.get_duration() <= 0:
             return
         self._pending_jump_to_start = False
         visible = self.state.get_visible_intervals()
         target = visible[0][0] if visible else 0.0
+        logger.debug(f"[JUMP-START] target={target:.2f}")
         self.player.seek(target)
         QTimer.singleShot(80, self._request_first_frame)
 
