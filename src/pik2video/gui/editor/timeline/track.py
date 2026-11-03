@@ -34,7 +34,8 @@ class TrackWidget(QWidget):
         self._current_height = TRACK_HEIGHT_NORMAL
         self._frames = []                  # list[QPixmap] для отрисовки превью
         self._markers = []                 # list[(time, kind)] — метки на дорожке
-        self._cut_intervals = []           # list[(start, end)] — вырезаемые участки
+        self._cut_intervals = []           # list[(start, end)] — вырезаемые участки (для затемнения)
+        self._display_intervals = []       # list[(s, e)] — видимые (после скрытия cut); пусто = всё видимо
         self.marker_btn = None             # QPushButton карандаша (для видео, назначается извне)
         self.setFixedHeight(self._current_height)
 
@@ -76,6 +77,47 @@ class TrackWidget(QWidget):
         self._cut_intervals = list(cut_intervals or [])
         self.update()
 
+    def set_display_intervals(self, intervals: list):
+        """Установить видимые интервалы (после скрытия cut). Пусто = всё видимо.
+
+        intervals — [(s, e), ...] в реальных секундах файла.
+        Используется для отрисовки: кадры и метки подтягиваются, на месте
+        разрезов рисуются красные чёрточки.
+        """
+        self._display_intervals = list(intervals or [])
+        self.update()
+
+    def _display_duration(self) -> float:
+        """Визуальная длина: сумма display_intervals, или duration если не заданы."""
+        if not self._display_intervals:
+            return self.duration
+        return sum(e - s for s, e in self._display_intervals)
+
+    def _real_to_x(self, real_sec: float) -> float:
+        """Реальное время → X на дорожке (по визуальным интервалам)."""
+        w = self.width()
+        if w <= 0:
+            return 0.0
+        if not self._display_intervals:
+            if self.duration <= 0:
+                return 0.0
+            return w * real_sec / self.duration
+
+        disp_dur = self._display_duration()
+        if disp_dur <= 0:
+            return 0.0
+
+        accumulated = 0.0
+        for s, e in self._display_intervals:
+            if real_sec < s - 0.001:
+                # В скрытом cut → к началу текущего интервала
+                return w * accumulated / disp_dur
+            if real_sec <= e + 0.001:
+                offset_in_seg = min(real_sec, e) - s
+                return w * (accumulated + offset_in_seg) / disp_dur
+            accumulated += e - s
+        return float(w)
+
     def set_height_by_zoom(self, height: int):
         """Высота задаётся зумом (следующий этап)."""
         self._current_height = max(6, height)
@@ -101,9 +143,15 @@ class TrackWidget(QWidget):
         if self._frames and self.duration > 0:
             self._draw_frames(painter)
 
-        # Затемнённые cut-участки и метки
-        if self.duration > 0:
+        # Красные чёрточки на месте разрезов (скрытые cut)
+        if self._display_intervals:
+            self._draw_gap_marks(painter)
+
+        # Затемнённые cut-участки и метки (только если cut не скрыты)
+        if self.duration > 0 and not self._display_intervals:
             self._draw_cut_intervals(painter)
+        if self.duration > 0:
+            self._draw_insertion_gaps(painter, bg_color)
             self._draw_markers(painter)
 
         painter.setBrush(Qt.NoBrush)   # страховка: рамка не должна заливать содержимое
@@ -117,38 +165,84 @@ class TrackWidget(QWidget):
     def _draw_frames(self, painter):
         """Нарисовать кадры вдоль дорожки.
 
-        При малой высоте (сжатая дорожка) — рисуем все кадры плотно (полоски).
-        При большой высоте (зум) — рисуем МЕНЬШЕ кадров, чтобы они остались
-        квадратными и занимали всю высоту. Кадры равномерно выбираются из всего набора.
+        Если _display_intervals заданы — рисуем только видимые фрагменты
+        (с подтяжкой: скрытые cut не занимают места).
+        Иначе — как раньше, по всей ширине.
         """
         w = self.width()
         h = self.height()
         total = len(self._frames)
-        if total <= 0 or w <= 0 or h <= 0:
+        if total <= 0 or w <= 0 or h <= 0 or self.duration <= 0:
             return
 
-        # Сколько кадров максимум может поместиться при квадратных кадрах высотой h
-        max_visible = max(1, w // h)
-        visible_count = min(total, max_visible)
+        if self._display_intervals:
+            # Подтянутый режим: рисуем каждый интервал отдельно
+            disp_dur = self._display_duration()
+            if disp_dur <= 0:
+                return
+            for seg_start, seg_end in self._display_intervals:
+                x_start = self._real_to_x(seg_start)
+                x_end = self._real_to_x(seg_end)
+                seg_w = max(1, int(x_end - x_start))
+                # Индексы кадров, попадающих в интервал
+                i_from = int(seg_start / self.duration * total)
+                i_to = min(total, int(seg_end / self.duration * total) + 1)
+                seg_frames = self._frames[i_from:i_to]
+                if not seg_frames:
+                    continue
+                self._draw_frames_strip(painter, seg_frames, int(x_start), seg_w, h)
+            return
 
-        # Равномерная выборка: индексы из всего набора
+        # Обычный режим: все кадры по всей ширине
+        self._draw_frames_strip(painter, self._frames, 0, w, h)
+
+    def _draw_frames_strip(self, painter, frames, x_offset: int, total_w: int, h: int):
+        """Вспомогательная: нарисовать полосу кадров в указанной области."""
+        total = len(frames)
+        if total <= 0 or total_w <= 0:
+            return
+        max_visible = max(1, total_w // h)
+        visible_count = min(total, max_visible)
         if visible_count >= total:
             indices = list(range(total))
         else:
             step = total / visible_count
             indices = [int(i * step) for i in range(visible_count)]
-
-        cell_w = w / visible_count
+        cell_w = total_w / visible_count
         frame_w_int = max(1, int(min(cell_w, float(h))))
-
         for slot, idx in enumerate(indices):
-            pixmap = self._frames[idx]
+            pixmap = frames[idx]
             if pixmap is None or pixmap.isNull():
                 continue
             cell_center = (slot + 0.5) * cell_w
-            frame_x = int(cell_center - frame_w_int / 2)
-            target = QRect(frame_x, 0, frame_w_int, h)
-            painter.drawPixmap(target, pixmap, pixmap.rect())
+            frame_x = x_offset + int(cell_center - frame_w_int / 2)
+            painter.drawPixmap(QRect(frame_x, 0, frame_w_int, h), pixmap, pixmap.rect())
+
+    def _draw_gap_marks(self, painter):
+        """Нарисовать красные чёрточки в местах разрезов (между фрагментами)."""
+        if len(self._display_intervals) < 2 or self.duration <= 0:
+            return
+        w = self.width()
+        h = self.height()
+        if w <= 0 or h <= 0:
+            return
+
+        from PySide6.QtGui import QPen, QColor
+        pen = QPen(QColor("#ff3333"), 3)   # яркая красная, 3px
+        painter.setPen(pen)
+
+        disp_dur = self._display_duration()
+        if disp_dur <= 0:
+            return
+
+        # Чёрточки между фрагментами: на стыке конца одного и начала следующего
+        accumulated = 0.0
+        for i, (s_seg, e_seg) in enumerate(self._display_intervals[:-1]):
+            accumulated += e_seg - s_seg
+            x = int(w * accumulated / disp_dur)
+            # Вертикальная чёрточка по центру высоты
+            margin = max(1, h // 6)
+            painter.drawLine(x, margin, x, h - margin)
 
     def _draw_cut_intervals(self, painter):
         """Затемнить вырезаемые участки поверх кадров."""
@@ -166,11 +260,34 @@ class TrackWidget(QWidget):
             # Более плотное затемнение + красноватый оттенок для явности
             painter.fillRect(x1, 0, x2 - x1, self.height(), QColor(20, 10, 10, 190))
 
-    def _draw_markers(self, painter):
-        """Нарисовать метки в виде I-beam: линия по центру + стрелки сверху/снизу.
+    def _draw_insertion_gaps(self, painter, bg_color):
+        """Закрасить фоном зазоры (разрезы) для меток "]["]."""
+        if not self._markers or self.duration <= 0:
+            return
+        w = self.width()
+        h = self.height()
+        if w <= 0 or h <= 0:
+            return
 
-        Верхняя стрелка смотрит вниз (остриё к линии), нижняя — вверх (остриё к линии).
-        Стрелки прижаты к краям дорожки. Линия между ними.
+        # Зазор — половина ширины разреза от центра (симметрично)
+        # Ограничен сверху (min 6), чтобы при зуме не разрастался слишком сильно
+        gap_half = max(3, min(6, int(h * 0.10)))
+
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(bg_color)
+        for time_sec, kind in self._markers:
+            if kind != "][":
+                continue
+            x = int(w * time_sec / self.duration)
+            painter.drawRect(x - gap_half, 0, gap_half * 2, h)
+        painter.setBrush(Qt.NoBrush)
+
+    def _draw_markers(self, painter):
+        """Нарисовать метки в виде скобок.
+
+        Для "]" и "[" — одна скобка на позиции.
+        Для "][" — ДВЕ скобки, разделённые зазором (разрез дорожки).
+        Размер стрелок динамический — растёт вместе с высотой дорожки (зумом).
         """
         if not self._markers or self.duration <= 0:
             return
@@ -179,66 +296,73 @@ class TrackWidget(QWidget):
         if w <= 0 or h <= 0:
             return
 
-        from PySide6.QtGui import QPolygonF, QFont
+        from PySide6.QtGui import QPolygonF
         from PySide6.QtCore import QPointF
 
         marker_color = QColor("#ffcc00")  # Яркий золотисто-желтый
         line_pen = QPen(marker_color, 2)
 
-        # Размер стрелок (высота треугольника) и полуширина основания
-        tri_h = 4
-        tri_half_w = 4
+        # Динамический размер стрелок
+        tri_h = max(4, min(10, int(h * 0.25)))
+        tri_half_w = max(3, min(8, int(h * 0.20)))
 
-        # Линия от y=tri_h до y=h-tri_h (между стрелками). Минимум 1px.
-        line_top = tri_h
-        line_bottom = max(line_top + 1, h - tri_h)
+        # Линия заходит внутрь треугольников (на 1px), чтобы стык был монолитным
+        line_top = max(0, tri_h - 1)
+        line_bottom = min(h, h - tri_h + 1)
 
-        # Шрифт — только если хватает высоты (между стрелками хотя бы 12px)
-        show_text = (line_bottom - line_top) >= 14
-        if show_text:
-            font = QFont("Menlo")
-            font.setPointSize(min(10, (line_bottom - line_top) // 2))
-            font.setBold(True)
-            painter.setFont(font)
+        # Зазор для меток "][" — половина ширины разреза
+        # Синхронизировано с _draw_insertion_gaps
+        gap_half = max(3, min(6, int(h * 0.10)))
+
+        def draw_single_bracket(cx: int, kind: str):
+            """Нарисовать одну скобку на позиции cx: "]" — левая, "[" — правая."""
+            # Линия
+            painter.setPen(line_pen)
+            painter.drawLine(cx, line_top, cx, line_bottom)
+
+            # Стрелки
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(marker_color)
+
+            if kind == "]":
+                # Левая половина стрелок
+                x_left_end = cx + 1
+                painter.drawPolygon(QPolygonF([
+                    QPointF(cx - tri_half_w, 0),
+                    QPointF(x_left_end, 0),
+                    QPointF(x_left_end, tri_h),
+                ]))
+                painter.drawPolygon(QPolygonF([
+                    QPointF(cx - tri_half_w, h),
+                    QPointF(x_left_end, h),
+                    QPointF(x_left_end, h - tri_h),
+                ]))
+            elif kind == "[":
+                # Правая половина стрелок
+                x_right_start = cx - 1
+                painter.drawPolygon(QPolygonF([
+                    QPointF(x_right_start, 0),
+                    QPointF(cx + tri_half_w, 0),
+                    QPointF(x_right_start, tri_h),
+                ]))
+                painter.drawPolygon(QPolygonF([
+                    QPointF(x_right_start, h),
+                    QPointF(cx + tri_half_w, h),
+                    QPointF(x_right_start, h - tri_h),
+                ]))
+
+            painter.setBrush(Qt.NoBrush)
 
         for time_sec, kind in self._markers:
             x = int(w * time_sec / self.duration)
 
-            # 1. Центральная линия
-            painter.setPen(line_pen)
-            painter.drawLine(x, line_top, x, line_bottom)
+            if kind == "][":
+                # Две скобки с зазором
+                draw_single_bracket(x - gap_half, "]")
+                draw_single_bracket(x + gap_half, "[")
+            elif kind == "]":
+                draw_single_bracket(x, "]")
+            elif kind == "[":
+                draw_single_bracket(x, "[")
 
-            # 2. Верхняя стрелка (смотрит вниз: основание вверху, остриё внизу)
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(marker_color)
-            top_poly = QPolygonF([
-                QPointF(x - tri_half_w, 0),
-                QPointF(x + tri_half_w, 0),
-                QPointF(x, tri_h),
-            ])
-            painter.drawPolygon(top_poly)
-
-            # 3. Нижняя стрелка (смотрит вверх: основание внизу, остриё вверху)
-            bottom_poly = QPolygonF([
-                QPointF(x - tri_half_w, h),
-                QPointF(x + tri_half_w, h),
-                QPointF(x, h - tri_h),
-            ])
-            painter.drawPolygon(bottom_poly)
-
-            # 4. Текст внутри линии (если есть место)
-            if show_text:
-                painter.setPen(QColor("#000000"))
-                for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                    painter.drawText(
-                        QRect(x - 15 + dx, line_top + dy, 30, line_bottom - line_top),
-                        Qt.AlignCenter, kind,
-                    )
-                painter.setPen(marker_color)
-                painter.drawText(
-                    QRect(x - 15, line_top, 30, line_bottom - line_top),
-                    Qt.AlignCenter, kind,
-                )
-
-            # Сброс кисти — иначе следующая drawRect для рамки зальёт дорожку
             painter.setBrush(Qt.NoBrush)

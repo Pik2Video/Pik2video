@@ -176,7 +176,7 @@ class Application:
 
     def _on_editor_closed(self):
         """Редактор закрыт. Если окно записи не видно — выходим."""
-        logger.info("Редактор закрыт")
+        logger.debug("Редактор закрыт")
         self.main_window.set_editor_visible(False)
 
         # Если окно записи открыто — приложение продолжает работу
@@ -185,7 +185,7 @@ class Application:
             return
 
         # Больше видимых окон нет — закрываем приложение
-        logger.info("Все окна закрыты — выходим")
+        logger.debug("Все окна закрыты — выходим")
         self.qt_app.quit()
 
     def _open_editor_with_file(self, path: str):

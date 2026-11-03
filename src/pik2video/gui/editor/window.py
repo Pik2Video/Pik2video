@@ -61,7 +61,7 @@ GAP = 4
 TOOLS_PANEL_WIDTH = 200
 
 # Доля экрана, которую занимает окно при старте
-WINDOW_SCREEN_RATIO = 0.88
+WINDOW_SCREEN_RATIO = 0.70
 
 
 class EditorWindow(QMainWindow):
@@ -97,7 +97,7 @@ class EditorWindow(QMainWindow):
 
 
         self.setWindowTitle("Редактор")
-        self.setMinimumSize(1100, 700)
+        self.setMinimumSize(900, 550)
         self.setFocusPolicy(Qt.StrongFocus)
 
         self._apply_adaptive_size()
@@ -106,6 +106,9 @@ class EditorWindow(QMainWindow):
         # ── Контроллеры (после _build_ui — им нужен top_bar) ──
         self._export_saved_path = None                              # путь к файлу, который был в плеере до экспорта
         self._marker_mode_active = False                             # режим сдвига рамки (перо/маркер)
+        self._skip_cut_in_progress = False                           # защита от рекурсии при перескоке cut
+        self._cut_stopped_at = None                                  # позиция, где плеер уже остановлен по cut
+        self._was_playing_before_marker_drag = False                 # для drag метки
         self._active_kind = "video"                                  # какой файл активен: "video" | "audio"
         self._marker_menu = None                                     # всплывающее меню инструментов метки
         self._active_tool = None                                     # текущий инструмент: None / "]" / "[" / "]["
@@ -169,8 +172,8 @@ class EditorWindow(QMainWindow):
         height = int(available.height() * WINDOW_SCREEN_RATIO)
 
         # Не меньше минимума
-        width = max(width, 1100)
-        height = max(height, 700)
+        width = max(width, 900)
+        height = max(height, 550)
 
         # Не больше доступной области
         width = min(width, available.width())
@@ -222,6 +225,9 @@ class EditorWindow(QMainWindow):
 
         self.multiplexer = PlayerWidget()
         self.multiplexer.setMinimumHeight(200)
+        # Resolver'ы для учёта cut-зон при play/loop/⏮
+        self.multiplexer.set_pre_play_resolver(self._resolve_pre_play)
+        self.multiplexer.set_start_resolver(self._resolve_start)
         mx_layout.addWidget(self.multiplexer, stretch=1)
 
         # ── Зона таймлайнов с общим ползунком ──
@@ -307,6 +313,11 @@ class EditorWindow(QMainWindow):
         self.timeline.height_changed.connect(self._on_timeline_height_changed)
         self.timeline.marker_clicked.connect(self._on_marker_clicked)
         self.timeline.marker_place_requested.connect(self._on_marker_place)
+        self.timeline.marker_delete_requested.connect(self._on_marker_delete_requested)
+        self.timeline.marker_drag_started.connect(self._on_marker_drag_started)
+        self.timeline.marker_dragged.connect(self._on_marker_dragged)
+        self.timeline.marker_drag_finished.connect(self._on_marker_drag_finished)
+        self.timeline.track_drag_finished.connect(self._on_track_drag_finished)
         self.timeline.playhead_drag_started.connect(self._on_scrub_started)
         self.timeline.playhead_dragged.connect(self._on_scrub_dragged)
         self.timeline.playhead_drag_finished.connect(self._on_scrub_finished)
@@ -469,7 +480,7 @@ class EditorWindow(QMainWindow):
         """EditorState сообщил, что активный файл сменился → отдаём плееру."""
         self.multiplexer.set_mode("video")                    # плеер в режим видео
         self.multiplexer.load_video(path)
-        self._schedule_jump_to_trim_start()                   # отложенный прыжок на trim_start
+        self._schedule_jump_to_start()                        # прыжок на начало видимого
         self._refresh_timeline_keyframes()                    # подтягиваем метки для нового файла
         if self.crop_mode.is_active():                        # режим пресетов уже открыт — обновить оверлей
             self.multiplexer.set_preset_visible(True)
@@ -489,14 +500,25 @@ class EditorWindow(QMainWindow):
         self.timeline.set_keyframes([])
         self._sync_export_name_field()
 
-        # Если был в видео-режиме и видео не осталось — переключиться на аудио
+        # Если был в видео-режиме и видео не осталось — переключиться на аудио.
+        # Через QTimer.singleShot(0, ...) — иначе QMediaPlayer блокирует на macOS
+        # при смене режима, пока video player ещё выгружается (зависание).
         if self.multiplexer.mode == "video" and self.state.has_audio():
-            logger.debug("Видео удалено — переключаемся на audio")
-            self.multiplexer.set_mode("audio")
-            self._update_zone_highlight()
+            logger.debug("Видео удалено — переключаемся на audio (отложенно)")
+            QTimer.singleShot(0, self._deferred_switch_to_audio)
 
         self._update_timelines_visibility()
 
+
+    def _deferred_switch_to_audio(self):
+        """Отложенное переключение на режим audio (из _on_video_unloaded)."""
+        if not self.state.has_audio():
+            return
+        try:
+            self.multiplexer.set_mode("audio")
+        except RuntimeError:
+            pass  # плеер мог быть закрыт
+        self._update_zone_highlight()
 
     def _on_audio_loaded(self, path: str):
         """EditorState восстановил аудиофайл → показываем в аудио-зоне."""
@@ -584,22 +606,24 @@ class EditorWindow(QMainWindow):
             self.multiplexer.set_position(a_start)
         self._export_saved_path = None
 
-    def _schedule_jump_to_trim_start(self, attempts: int = 20):
-        """Прыжок на trim_start после загрузки видео.
+    def _schedule_jump_to_start(self, attempts: int = 20):
+        """Прыжок на начало воспроизведения после загрузки видео.
 
+        Начало = первый видимый интервал (0 или первая метка ]).
         Плеер грузит duration асинхронно: сразу после load_video() duration == 0.
-        Ждём по 50 мс до 1 сек, потом делаем set_position(trim_start).
+        Ждём по 50 мс до 1 сек, потом делаем set_position.
         """
         if not self.state.has_videos():
             return
-        trim_start, _ = self.state.get_trim()
-        if trim_start <= 0:
-            return
+
+        visible = self.state.get_visible_intervals()
+        target = visible[0][0] if visible else 0.0
+
         if self.multiplexer.video_player.duration() > 0:
-            self.multiplexer.set_position(trim_start)
+            self.multiplexer.set_position(target)
         elif attempts > 0:
             QTimer.singleShot(
-                50, lambda: self._schedule_jump_to_trim_start(attempts - 1)
+                50, lambda: self._schedule_jump_to_start(attempts - 1)
             )
 
     def _on_duration_changed(self, seconds: float):
@@ -735,8 +759,69 @@ class EditorWindow(QMainWindow):
         self._active_tool = None
         self.timeline.set_tool_cursor(None)
 
+    def _on_marker_delete_requested(self, path: str, time_sec: float):
+        """Правый клик на метке — удалить её из состояния."""
+        if path != self.state.get_video_path():
+            logger.warning(f"Попытка удалить метку с неактивного файла: {path}")
+            return
+
+        ok = self.state.remove_timeline_marker(time_sec)
+        if ok:
+            logger.info(f"Метка на {time_sec:.2f}с удалена")
+        else:
+            logger.warning(f"Метка на {time_sec:.2f}с не найдена (возможно, уже удалена)")
+
+    def _on_marker_drag_started(self, path: str, time_sec: float):
+        """Начали тащить метку: пауза + позиционируем плеер на метку."""
+        self._cut_stopped_at = None   # сброс флага остановки
+        logger.info(f"[MARKER-DRAG-START] {Path(path).name} @ {time_sec:.2f}с")
+        self._was_playing_before_marker_drag = self.multiplexer.engine.is_playing()
+        if self._was_playing_before_marker_drag:
+            self.multiplexer.engine.pause()
+
+        # Позиционируем плеер на метку (пользователь видит кадр, с которого тащит)
+        self.multiplexer._suppress_cut_skip = True
+        try:
+            self.multiplexer.set_position(time_sec)
+        finally:
+            self.multiplexer._suppress_cut_skip = False
+
+    def _on_marker_dragged(self, path: str, old_time: float, new_time: float):
+        """Тащим метку: двигаем в state + прокручиваем плеер."""
+        ok = self.state.move_timeline_marker(old_time, new_time, save=False)
+        if not ok:
+            return
+
+        # Плеер за меткой
+        self.multiplexer._suppress_cut_skip = True
+        try:
+            self.multiplexer.set_position(new_time)
+        finally:
+            self.multiplexer._suppress_cut_skip = False
+
+    def _on_marker_drag_finished(self, path: str, final_time: float):
+        """Отпустили метку: сохраняем в JSON + возобновляем play при необходимости."""
+        logger.debug(f"[MARKER-DRAG] finish: {final_time:.2f}с")
+        # Метка уже на final_time (двигали во время drag) — просто сохраняем JSON
+        self.state._save_files()
+
+        if self._was_playing_before_marker_drag:
+            self.multiplexer.engine.play()
+        self._was_playing_before_marker_drag = False
+
+    def _on_track_drag_finished(self, path: str, offset_sec: float):
+        """Закончили drag дорожки по X.
+
+        Для аудио — обновляем audio_offset в state (плеер и экспорт начнут
+        учитывать позицию). Для видео — пока только визуально.
+        """
+        if path == self.state.get_audio_path():
+            logger.info(f"[TRACK-DRAG] audio offset: {offset_sec:.2f}с")
+            self.state.set_audio_offset(offset_sec)
+
     def _on_scrub_started(self):
         """Начало drag по скрабберу: пауза плеера + кэш кадров."""
+        self._cut_stopped_at = None   # пользователь тащит playhead — сброс
         self._was_playing_before_drag = self.multiplexer.begin_trim_drag()
         self.multiplexer.set_keep_frames(True)
         # Если drag не случится (клик без движения) — позиция не должна меняться
@@ -905,6 +990,7 @@ class EditorWindow(QMainWindow):
         self.drop_area.set_video_active(self.state.get_active_index())
         self._sync_export_name_field()
         self.timeline.set_active_video(self.state.get_active_index())
+        self._schedule_jump_to_start()   # playhead на начало видимого активного видео
 
     def load_file(self, path: str, preferred_name: str = "") -> bool:
         """Загрузить файл в редактор извне. Возвращает True при успехе.
@@ -937,24 +1023,6 @@ class EditorWindow(QMainWindow):
 
         return True
     
-    def _on_marker_dragged(self, seconds: float, x_local: int):
-        """Перетаскивание маркера — двигать красную полоску и показывать превью кадра."""
-        # Двигаем красную полоску (курсор) и синхронизируем состояние
-        self.timeline.set_position(seconds)
-        self.state.set_position(seconds)
-
-        now_ms = int(time.time() * 1000)
-        if now_ms - self._last_preview_seek_ms >= 200:                # throttle 200 мс (5 fps)
-            self.multiplexer.seek_for_preview(seconds)               # попросить декодер новый кадр
-            self._last_preview_seek_ms = now_ms
-
-        pixmap = self.multiplexer.get_last_frame()
-        if pixmap is None:
-            return
-
-        global_pos = self.timeline.mapToGlobal(QPoint(x_local, 0))
-        self._frame_preview.show_frame(pixmap, global_pos.x(), global_pos.y())
-
     def _on_marker_drag_started(self):
         """Начало drag метки: пауза плеера + кэш кадров для превью."""
         self._was_playing_before_drag = self.multiplexer.begin_trim_drag()
@@ -1044,24 +1112,126 @@ class EditorWindow(QMainWindow):
         step = sw * 0.05
         self.state.set_offset_x(self.state.get_offset_x() + step)
 
+    def _first_visible_start(self, default: float) -> float:
+        """Начало первого видимого интервала. default — если меток нет."""
+        visible = self.state.get_visible_intervals()
+        if not visible:
+            return default
+        return visible[0][0]
+
+    def _resolve_pre_play(self, current_sec: float):
+        """Перед play: скорректировать стартовую позицию.
+
+        Случаи:
+        - позиция в cut → перескок на следующий видимый (или начало)
+        - позиция на КОНЦЕ видимого интервала (в пределах 0.1с) → к началу
+        - позиция в середине видимого → не двигаем (играем как есть)
+        """
+        # Сбрасываем флаг «уже остановлены» — пользователь явно хочет играть
+        self._cut_stopped_at = None
+
+        visible = self.state.get_visible_intervals()
+        if not visible:
+            return None
+
+        # Если в cut → к следующему видимому или к началу
+        if not self.state.is_time_visible(current_sec):
+            next_t = self.state.next_visible_time(current_sec)
+            if abs(next_t - current_sec) < 0.01:
+                return visible[0][0]
+            return next_t
+
+        # В видимой зоне — проверяем, не в самом ли конце
+        for start, end in visible:
+            if start <= current_sec <= end:
+                if current_sec >= end - 0.1:
+                    # На конце видимого → к началу первого видимого
+                    return visible[0][0]
+                # В середине видимого — не двигаем
+                return None
+
+        return None
+
+    def _resolve_start(self, default_sec: float) -> float:
+        """Кнопка ⏮ и loop: всегда к началу первого видимого."""
+        self._cut_stopped_at = None   # сброс флага
+        visible = self.state.get_visible_intervals()
+        result = visible[0][0] if visible else default_sec
+        logger.debug(
+            f"[RESOLVE-START] default={default_sec:.2f} visible={visible} → {result:.2f}"
+        )
+        return result
+
     def _on_player_position_changed(self, seconds: float):
-        """Динамический сдвиг рамки при движении ползунка."""
-        # Если пользователь в режиме редактирования (двигает стрелками) — не перебиваем
+        """Движение ползунка: перескок/loop через cut + сдвиг рамки по меткам зума."""
+        if self.multiplexer._suppress_cut_skip:
+            return
+
+        # ── 1. Перескок / loop на cut-участках ──
+        # Только при воспроизведении. При ручном drag пользователь свободен.
+        if (not self._skip_cut_in_progress
+                and self.multiplexer.engine.is_playing()):
+            if not self.state.is_time_visible(seconds):
+                next_time = self.state.next_visible_time(seconds)
+
+                if abs(next_time - seconds) < 0.01:
+                    # Хвостовой cut — нет видимого после
+                    visible = self.state.get_visible_intervals()
+                    if not visible:
+                        return
+
+                    # Защита от повторного срабатывания на той же позиции
+                    if (self._cut_stopped_at is not None
+                            and abs(self._cut_stopped_at - seconds) < 0.5):
+                        return
+
+                    if self.multiplexer.is_loop_enabled():
+                        # Loop → на начало первого видимого
+                        loop_start = self._resolve_start(0.0)
+                        logger.debug(
+                            f"[CUT-LOOP] {seconds:.2f} → {loop_start:.2f}"
+                        )
+                        self._skip_cut_in_progress = True
+                        try:
+                            self.multiplexer.set_position(loop_start)
+                        finally:
+                            self._skip_cut_in_progress = False
+                    else:
+                        # Пауза на конце последнего видимого
+                        last_end = visible[-1][1]
+                        logger.debug(
+                            f"[CUT-STOP] {seconds:.2f}: пауза на {last_end:.2f}"
+                        )
+                        self._skip_cut_in_progress = True
+                        self._cut_stopped_at = last_end   # запоминаем
+                        try:
+                            # Сначала pause — останавливаем поток positionChanged
+                            self.multiplexer.engine.pause()
+                            # Потом сдвигаем на конец видимого
+                            self.multiplexer.set_position(last_end)
+                        finally:
+                            self._skip_cut_in_progress = False
+                    return
+
+                # Есть следующий видимый → перескок
+                logger.debug(f"[CUT-SKIP] {seconds:.2f} → {next_time:.2f}")
+                self._skip_cut_in_progress = True
+                try:
+                    self.multiplexer.set_position(next_time)
+                finally:
+                    self._skip_cut_in_progress = False
+                return
+
+        # ── 2. Динамический сдвиг рамки по меткам зума ──
         if self._marker_mode_active:
             return
-            
+
         markers = self.state.get_markers()
         if not markers:
-            # Если меток нет — рамка возвращается в центр (offset=0)
             self.state.set_offset_x(0.0, save=False)
             return
 
-        # Вычисляем активную метку (ступенчато).
-        # Допуск 1 мс — маркеры уже снапнуты к кадрам, больший допуск
-        # срабатывал бы на 1-2 кадра раньше.
         active_offset, active_zoom = self.state.get_marker_state_at(seconds)
-                
-        # Применяем без сохранения в JSON
         self.state.set_offset_x(active_offset, save=False)
         self.state.set_aspect_zoom(active_zoom, save=False)
 
@@ -1211,7 +1381,7 @@ class EditorWindow(QMainWindow):
         self._cleanup_aux_windows()
         self._cleanup_media()
 
-        logger.info("Редактор скрыт (не уничтожен)")
+        logger.debug("Редактор скрыт (не уничтожен)")
         self.closed.emit()
         super().closeEvent(event)
 

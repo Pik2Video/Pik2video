@@ -57,6 +57,7 @@ class PlayerEngine(QObject):
         self._video_volume = 1.0
         self._audio_volume = 1.0
         self._video_fps = DEFAULT_FPS
+        self._loop_start_resolver = None   # fn(default_sec) -> start_sec для loop
 
     # ── API ──
 
@@ -72,6 +73,10 @@ class PlayerEngine(QObject):
 
     def set_loop(self, enabled: bool):
         self._loop_enabled = enabled
+
+    def set_loop_start_resolver(self, fn):
+        """fn(default_start_sec) -> start_sec. Вызывается при loop."""
+        self._loop_start_resolver = fn
 
     def set_trim_range(self, start: float, end: float):
         self._trim_start = max(0.0, start)
@@ -213,7 +218,10 @@ class PlayerEngine(QObject):
 
         if trim_end > 0 and seconds >= trim_end and player.playbackState() == QMediaPlayer.PlayingState:
             if self._loop_enabled:
-                player.setPosition(int(trim_start * 1000))
+                loop_start = trim_start
+                if self._loop_start_resolver is not None:
+                    loop_start = self._loop_start_resolver(trim_start)
+                player.setPosition(int(loop_start * 1000))
                 if player is self._player and self.has_audio():
                     self._sync_audio_to_video()
                 return
@@ -232,6 +240,13 @@ class PlayerEngine(QObject):
         self.audio_duration_changed.emit(ms / 1000.0)
 
     def _on_state_changed(self, state):
+        # Сигнал о смене play/pause — только от АКТИВНОГО плеера.
+        # Иначе при завершении аудио (видео ещё играет) кнопка дёргается.
+        sender = self.sender()
+        if self._mode == "video" and sender is self._audio_player:
+            return
+        if self._mode == "audio" and sender is self._player:
+            return
         self.playback_state_changed.emit(state == QMediaPlayer.PlayingState)
 
     def _on_meta_data_changed(self):
@@ -264,6 +279,14 @@ class PlayerEngine(QObject):
             return
 
         audio_dur = self._audio_player.duration() / 1000.0
+
+        # Аудио уже закончилось, а видео продолжается → не рестартить
+        # (иначе QMediaPlayer мгновенно уходит в Stopped → бесконечный цикл play/stop)
+        if audio_dur > 0 and video_pos - self._audio_offset >= audio_dur - 0.05:
+            if self._audio_player.playbackState() == QMediaPlayer.PlayingState:
+                self._audio_player.pause()
+            return
+
         if audio_dur > 0 and audio_pos > audio_dur:
             audio_pos = audio_dur
 

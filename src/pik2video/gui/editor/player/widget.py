@@ -41,6 +41,9 @@ class PlayerWidget(PlayerUI):
         self._audio_volume = 1.0
         self._linked_mode = True
         self._marker_mode_active = False
+        self._pre_play_resolver = None    # fn(current_sec) -> new_sec | None
+        self._suppress_cut_skip = False   # запрет перескока в _on_player_position_changed
+        self._start_resolver = None       # fn(default_sec) -> new_sec
 
         self._speed_index = SPEED_PRESETS.index(1.0)
         self._video_speed_index = SPEED_PRESETS.index(1.0)
@@ -138,25 +141,45 @@ class PlayerWidget(PlayerUI):
         self._maybe_reset_ui()
 
     def set_mode(self, mode: str):
+        """Переключить режим. ТОЛЬКО логика + UI. Без QMediaPlayer операций.
+
+        Причина: QMediaPlayer.setPosition() / pause() на macOS блокируют GIL
+        при переключении с видео на аудио. Никакие try/except не помогут —
+        это C++-блокировка. Поэтому все действия с плеером отложены.
+        """
         if self.engine._mode == mode:
             return
-        self.engine.pause()
-        self.engine.set_mode(mode)
+        logger.debug(f"[SET-MODE] {self.engine._mode} → {mode}")
+
+        was_playing = False
+        try:
+            was_playing = self.engine.is_playing()
+        except RuntimeError:
+            pass
+
+        # Просто меняем режим в движке — без pause/seek.
+        self.engine._mode = mode
+
+        # UI: какая страница видна
         if mode == "video":
             if self.engine.has_video():
                 self._show_player()
-                self.engine.seek(self.engine.get_position())
             else:
                 self._show_placeholder()
         else:
             if self.engine.has_audio():
                 self._stack.setCurrentWidget(self._audio_page)
-                self.engine.seek(self.engine._audio_trim_start)
             else:
                 self._show_placeholder()
-        QTimer.singleShot(0, self._sync_speed_ui)
+
         self._update_play_button()
         self._apply_volume()
+
+        # Если играло — пауза отложенно (не блокирует UI)
+        if was_playing:
+            QTimer.singleShot(0, self.engine.pause)
+
+        logger.debug(f"[SET-MODE] done: {mode}")
 
     def set_position(self, seconds: float):
         self.engine.seek(seconds)
@@ -183,6 +206,21 @@ class PlayerWidget(PlayerUI):
         if active:
             self.engine.pause()
         self._set_controls_enabled(self.engine.has_video() or self.engine.has_audio())
+
+    def set_pre_play_resolver(self, fn):
+        """fn(current_pos_sec) -> new_pos_sec | None. Вызывается перед play()."""
+        self._pre_play_resolver = fn
+
+    def set_start_resolver(self, fn):
+        """fn(default_start_sec) -> start_sec. Для кнопки ⏮."""
+        self._start_resolver = fn
+
+    def set_loop_start_resolver(self, fn):
+        """Проброс в engine — resolver для loop."""
+        self.engine.set_loop_start_resolver(fn)
+
+    def is_loop_enabled(self) -> bool:
+        return self._btn_loop.isChecked()
 
     def set_preset_blink_phase(self, phase: float):
         self._preset_frame.set_blink_phase(phase)
@@ -302,8 +340,23 @@ class PlayerWidget(PlayerUI):
     def _toggle_play(self):
         if self.engine.is_playing():
             self.engine.pause()
-        else:
-            self.engine.play()
+            return
+        # Даём шанс скорректировать стартовую позицию (cut-зоны)
+        if self._pre_play_resolver is not None:
+            current = self.engine.get_position()
+            new_pos = self._pre_play_resolver(current)
+            if new_pos is not None and abs(new_pos - current) > 0.01:
+                # Защита от гонки: пока QMediaPlayer применяет seek,
+                # position-changed может приходить со старым значением (в cut-зоне).
+                # Без защиты — CUT-STOP → pause в момент старта.
+                self._suppress_cut_skip = True
+                self.engine.seek(new_pos)
+                QTimer.singleShot(300, self._clear_suppress_cut_skip)
+        self.engine.play()
+
+    def _clear_suppress_cut_skip(self):
+        """Снять защиту после того, как QMediaPlayer применил seek."""
+        self._suppress_cut_skip = False
 
     def _update_play_button(self):
         """Обновить иконку play/pause по состоянию движка."""
@@ -343,8 +396,18 @@ class PlayerWidget(PlayerUI):
 
     def _on_go_to_start(self):
         active = self._active_player()
-        trim_start, _ = self._trim_for(active)
-        self.engine.seek(trim_start)
+        trim_start, trim_end = self._trim_for(active)
+        target = trim_start
+        if self._start_resolver is not None:
+            target = self._start_resolver(trim_start)
+        logger.debug(
+            f"[GOTO-START] trim=({trim_start:.2f},{trim_end:.2f}) → {target:.2f}"
+        )
+        self._suppress_cut_skip = True
+        try:
+            self.engine.seek(target)
+        finally:
+            self._suppress_cut_skip = False
 
     def _on_rewind(self):
         active = self._active_player()

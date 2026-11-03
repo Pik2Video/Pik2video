@@ -77,6 +77,13 @@ class TimelineWidget(QWidget):
     height_changed = Signal(int)            # идеальная высота таймлайна (для мультиплеера)
     marker_clicked = Signal(str, QPoint)    # клик на карандаш: путь файла, глобальная позиция
     marker_place_requested = Signal(str, float)  # поставить метку: путь файла, секунды
+    marker_delete_requested = Signal(str, float) # удалить метку: путь файла, секунды
+    marker_drag_started = Signal(str, float)     # начали тащить метку: (path, start_time)
+    marker_dragged = Signal(str, float, float)   # тащим: (path, old_time, new_time)
+    marker_drag_finished = Signal(str, float)    # отпустили: (path, final_time)
+    cut_hide_requested = Signal(str, float, float)     # скрыть cut: (path, start, end)
+    cut_restore_requested = Signal(str, float, float)  # восстановить cut: (path, start, end)
+    track_drag_finished = Signal(str, float)     # закончили drag дорожки по X: (path, offset_sec)
 
     def __init__(self, state, thumbnail_loader=None, parent=None):
         super().__init__(parent)
@@ -94,6 +101,9 @@ class TimelineWidget(QWidget):
         self._active_video_index = 0
         self._wheel_accumulator = 0                # накопление дельты колеса
         self._wheel_target_path = ""               # путь дорожки под курсором
+        self._dragging_marker = None               # (path, current_time) при drag метки
+        self._track_offsets = {}                   # path -> визуальный сдвиг в секундах (X-drag)
+        self._dragging_track = None                # (path, start_offset, start_global_x)
         self._tool_cursor: QCursor | None = None   # кастомный курсор инструмента метки
 
         self.setStyleSheet("background-color: #151515; border-top: 1px solid #000;")
@@ -139,6 +149,14 @@ class TimelineWidget(QWidget):
             self._add_track("audio", audio_path, dur, 0)
             if dur > 0:
                 self._request_frames(self._tracks[-1][0], dur)
+            # Восстанавливаем визуальный offset аудио из state
+            self._track_offsets[audio_path] = self.state.get_audio_offset()
+
+        # Чистим offset у видео-дорожек (их больше не двигаем)
+        video_paths = set(video_files)
+        for k in list(self._track_offsets.keys()):
+            if k in video_paths:
+                del self._track_offsets[k]
 
         self._recalc_total()
         self._update_playhead()
@@ -200,9 +218,18 @@ class TimelineWidget(QWidget):
             icon_layout.addWidget(marker_btn, alignment=Qt.AlignVCenter)
             track.marker_btn = marker_btn
 
+        # Spacer между иконкой и дорожкой — сдвигает ТОЛЬКО дорожку при drag,
+        # иконка остаётся на месте. Ширина управляется в _update_widths.
+        row_spacer = QWidget()
+        row_spacer.setFixedWidth(0)
+        row_spacer.setStyleSheet("background: transparent;")
+
         row_layout.addWidget(icon_container, alignment=Qt.AlignVCenter)
+        row_layout.addWidget(row_spacer, alignment=Qt.AlignVCenter)
         row_layout.addWidget(track, alignment=Qt.AlignVCenter)
         row_layout.addStretch(1)
+
+        track._row_spacer = row_spacer   # ссылка для управления шириной
 
         self._tracks_layout.addWidget(row)
         self._tracks.append((track, icon))
@@ -271,16 +298,21 @@ class TimelineWidget(QWidget):
             self._thumbnail_loader.request_frames(track.path, count, duration)
 
     def _refresh_markers(self):
-        """Передать метки и cut-интервалы из EditorState во все дорожки."""
-        logger.debug(f"[MARKERS] refresh: {len(self._tracks)} дорожек")
+        """Передать метки, cut-интервалы и display-интервалы во все дорожки."""
         for track, _ in self._tracks:
             markers = self.state.get_timeline_markers(track.path)
             cuts = self.state.get_cut_intervals(track.path)
-            logger.debug(
-                f"[MARKERS] {Path(track.path).name}: "
-                f"{len(markers)} меток, {len(cuts)} cut"
-            )
             track.set_markers(markers, cuts)
+
+            # display = визуальные интервалы (без скрытых cut).
+            # Если весь файл виден (один интервал 0..duration) — передаём пусто
+            # (оптимизация: track работает в обычном режиме).
+            display = self.state.get_display_intervals(track.path)
+            if (len(display) == 1
+                    and display[0][0] < 0.01
+                    and abs(display[0][1] - track.duration) < 0.01):
+                display = []
+            track.set_display_intervals(display)
 
     def _on_frames_ready(self, source_path: str, count: int):
         """Кадры готовы в кэше → загрузить pixmaps и передать в дорожки."""
@@ -347,7 +379,21 @@ class TimelineWidget(QWidget):
             return
         for track, _ in self._tracks:
             ratio = track.duration / self._total_duration if track.duration > 0 else 1.0
-            track.setFixedWidth(max(20, int(ratio * available)))
+            track_px = max(20, int(ratio * available))
+            track.setFixedWidth(track_px)
+
+            # Сдвиг через spacer: только дорожка, иконка на месте.
+            offset_sec = self._track_offsets.get(track.path, 0.0)
+            offset_px = int((offset_sec / self._total_duration) * available) if self._total_duration > 0 else 0
+            max_offset_px = max(0, available - track_px)
+            offset_px = max(0, min(offset_px, max_offset_px))
+
+            spacer = getattr(track, "_row_spacer", None)
+            if spacer is not None:
+                spacer.setFixedWidth(offset_px)
+
+        # Ползунок следует за дорожкой при её сдвиге
+        self._update_playhead()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -363,15 +409,30 @@ class TimelineWidget(QWidget):
         self._update_playhead()
 
     def _update_playhead(self):
+        """Позиция playhead в координатах ТАЙМЛАЙНА.
+
+        self._position — секунды плеера (от 0 активного видео).
+        Реальная позиция на таймлайне = offset активного видео + position.
+        При сдвинутой дорожке это даёт правильное положение.
+        """
         if self._total_duration <= 0:
             self._playhead_x = 0
-        else:
-            available = self.width() - ICON_WIDTH
-            if available <= 0:
-                self._playhead_x = 0
-            else:
-                ratio = max(0.0, min(1.0, self._position / self._total_duration))
-                self._playhead_x = int(ICON_WIDTH + ratio * available)
+            self._playhead_overlay.set_x(self._playhead_x)
+            return
+
+        available = self.width() - ICON_WIDTH
+        if available <= 0:
+            self._playhead_x = 0
+            self._playhead_overlay.set_x(self._playhead_x)
+            return
+
+        # Offset активного видео (в секундах таймлайна)
+        active_path = self.state.get_video_path() if self.state else None
+        active_offset = self._track_offsets.get(active_path, 0.0) if active_path else 0.0
+
+        timeline_pos = active_offset + self._position
+        ratio = max(0.0, min(1.0, timeline_pos / self._total_duration))
+        self._playhead_x = int(ICON_WIDTH + ratio * available)
         self._playhead_overlay.set_x(self._playhead_x)
 
     def _x_to_seconds(self, x: float) -> float:
@@ -403,18 +464,6 @@ class TimelineWidget(QWidget):
             if (0 <= local.x() <= track.width()
                     and -self.HIT_PADDING_Y <= local.y() <= track.height() + self.HIT_PADDING_Y):
                 return track
-
-        # Промах — залогируем геометрию, чтобы понять, куда кликнули
-        logger.debug(
-            f"[MARKER] track_at MISS pos={global_pos}, tracks:"
-        )
-        for track, _ in self._tracks:
-            local = track.mapFromGlobal(global_pos)
-            logger.debug(
-                f"[MARKER]   {Path(track.path).name}: "
-                f"local=({local.x()},{local.y()}), "
-                f"size=({track.width()}x{track.height()})"
-            )
         return None
 
     def debug_tracks_geometry(self):
@@ -432,6 +481,129 @@ class TimelineWidget(QWidget):
         local = track.mapFromGlobal(global_pos)
         ratio = max(0.0, min(1.0, local.x() / track.width()))
         return ratio * track.duration
+
+    def _track_duration(self, path: str) -> float:
+        for t, _ in self._tracks:
+            if t.path == path:
+                return t.duration
+        return 0.0
+
+    def _track_for_x_drag_at(self, global_pos: QPoint):
+        """Найти дорожку, которую можно тащить по X. Возвращает (track, local_x) или None.
+
+        Тащим ТОЛЬКО аудио-дорожку. Видео-дорожки по X не двигаем — иначе
+        ломается единая координатная система playhead (плеер и таймлайн
+        начинают работать в разных системах).
+
+        Не тащим:
+        - видео (любой длины)
+        - если клик на метке
+        - если клик на playhead
+        """
+        track = self._track_at(global_pos)
+        if track is None or track.duration <= 0:
+            return None
+        # Только аудио
+        if track.track_type != "audio":
+            return None
+        # Не тащим, если кликнули на метку
+        if self._marker_at(global_pos) is not None:
+            return None
+        local = track.mapFromGlobal(global_pos)
+        return track, local.x()
+
+    def _marker_at(self, global_pos: QPoint):
+        """Найти метку под курсором. Возвращает (path, time_sec) или None."""
+        track = self._track_at(global_pos)
+        if track is None or track.duration <= 0 or track.width() <= 0:
+            return None
+
+        local = track.mapFromGlobal(global_pos)
+        local_x = local.x()
+
+        markers = self.state.get_timeline_markers(track.path)
+        for time_sec, _kind in markers:
+            marker_x = int(track.width() * time_sec / track.duration)
+            # Допуск в пикселях для попадания по метке
+            if abs(local_x - marker_x) <= 6:
+                return track.path, time_sec
+        return None
+
+    def _cut_at(self, global_pos: QPoint):
+        """Найти видимый (не скрытый) cut под курсором.
+
+        Работает только когда display_intervals пуст (всё в реальных координатах).
+        Если display задан (есть скрытые cut) — все cut визуально подтянуты,
+        кликнуть на них нельзя.
+        """
+        track = self._track_at(global_pos)
+        if track is None or track.duration <= 0 or track.width() <= 0:
+            return None
+
+        # Если есть скрытые cut — cut визуально отсутствуют
+        display = self.state.get_display_intervals(track.path)
+        if len(display) > 1:
+            return None
+
+        cuts = self.state.get_cut_intervals(track.path)
+        if not cuts:
+            return None
+
+        local = track.mapFromGlobal(global_pos)
+        local_x = local.x()
+
+        for cs, ce in cuts:
+            x_start = track.width() * cs / track.duration
+            x_end = track.width() * ce / track.duration
+            if x_start <= local_x <= x_end:
+                return track.path, cs, ce
+        return None
+
+    def _gap_at(self, global_pos: QPoint):
+        """Найти красную чёрточку (разрез) под курсором.
+
+        Работает только когда display_intervals задан (есть скрытые cut).
+        Возвращает (path, real_start, real_end) — реальные границы скрытого cut.
+        """
+        track = self._track_at(global_pos)
+        if track is None or track.duration <= 0 or track.width() <= 0:
+            return None
+
+        display = self.state.get_display_intervals(track.path)
+        if len(display) < 2:
+            return None
+
+        local = track.mapFromGlobal(global_pos)
+        local_x = local.x()
+
+        disp_dur = sum(e - s for s, e in display)
+        if disp_dur <= 0:
+            return None
+
+        # Чёрточки между фрагментами: accumulated позиция
+        accumulated = 0.0
+        for i, (s_seg, e_seg) in enumerate(display[:-1]):
+            accumulated += e_seg - s_seg
+            x = track.width() * accumulated / disp_dur
+            if abs(local_x - x) <= 6:
+                # Реальные границы скрытого cut: конец текущего видимого - начало следующего
+                next_start = display[i + 1][0]
+                return track.path, e_seg, next_start
+        return None
+
+    def contextMenuEvent(self, event):
+        """Правый клик на метке — удалить. В остальных местах — стандартное меню."""
+        if self._tool_cursor is not None:
+            return super().contextMenuEvent(event)
+
+        marker = self._marker_at(event.globalPos())
+        if marker is not None:
+            path, time_sec = marker
+            self.marker_delete_requested.emit(path, time_sec)
+            event.accept()
+            return
+
+        super().contextMenuEvent(event)
 
     # ── Инструменты меток (курсоры) ──
 
@@ -482,6 +654,44 @@ class TimelineWidget(QWidget):
     def mouseMoveEvent(self, event):
         x = event.position().x()
 
+        # Приоритет 0: drag дорожки по X
+        if self._dragging_track is not None:
+            path, start_offset, start_x = self._dragging_track
+            delta_x = event.globalPosition().toPoint().x() - start_x
+            available = self.width() - ICON_WIDTH
+            if available > 0 and self._total_duration > 0:
+                delta_sec = (delta_x / available) * self._total_duration
+                new_offset = max(0.0, start_offset + delta_sec)
+                # Ограничение: дорожка не должна уходить за правый край
+                max_offset = max(0.0, self._total_duration - self._track_duration(path))
+                new_offset = min(new_offset, max_offset)
+                self._track_offsets[path] = new_offset
+                self._update_widths()
+                self.update()
+            return
+
+        # Приоритет 1: drag метки
+        if self._dragging_marker is not None:
+            path, old_time = self._dragging_marker
+            # Ищем дорожку по сохранённому path, не по hit-box (курсор может уйти по Y)
+            track = None
+            for t, _ in self._tracks:
+                if t.path == path:
+                    track = t
+                    break
+            if track is not None and track.width() > 0:
+                local = track.mapFromGlobal(event.globalPosition().toPoint())
+                # Разрешаем тащить даже если курсор вышел за пределы дорожки по Y,
+                # но не выше/ниже разумного (иначе X-координата теряет смысл)
+                x_clamped = max(0, min(track.width(), local.x()))
+                ratio = x_clamped / track.width()
+                new_time = ratio * track.duration
+                if abs(new_time - old_time) > 0.001:
+                    self.marker_dragged.emit(path, old_time, new_time)
+                    self._dragging_marker = (path, new_time)
+            return
+
+        # Приоритет 2: drag playhead
         if self._dragging_playhead:
             seconds = self._x_to_seconds(x)
             self.set_position(seconds)
@@ -489,43 +699,87 @@ class TimelineWidget(QWidget):
             self.playhead_dragged.emit(seconds, int(x))
             return
 
-        # При активном инструменте метки кастомный курсор не трогаем
+        # Приоритет 3: активный инструмент — курсор не трогаем
         if self._tool_cursor is not None:
+            return
+
+        # Приоритет 4: hover на метке или playhead
+        marker = self._marker_at(event.globalPosition().toPoint())
+        if marker is not None:
+            self.setCursor(Qt.SizeHorCursor)
             return
 
         if self._is_near_playhead(x):
             self.setCursor(Qt.PointingHandCursor)
-        else:
-            self.setCursor(Qt.ArrowCursor)
+            return
+
+        # Hover над короткой дорожкой → рука (можно тащить по X)
+        target = self._track_for_x_drag_at(event.globalPosition().toPoint())
+        if target is not None:
+            self.setCursor(Qt.OpenHandCursor)
+            return
+
+        self.setCursor(Qt.ArrowCursor)
 
     def mousePressEvent(self, event):
         if event.button() != Qt.LeftButton:
             return super().mousePressEvent(event)
 
-        logger.debug(
-            f"[MARKER] mousePress: tool={self._tool_cursor is not None}, "
-            f"pos={event.globalPosition().toPoint()}"
-        )
-
         # Приоритет 1: активный инструмент метки — клик ставит метку на дорожке
         if self._tool_cursor is not None:
             track = self._track_at(event.globalPosition().toPoint())
-            logger.debug(
-                f"[MARKER] track под курсором: {track.path if track else 'None'}"
-            )
             if track is not None:
                 seconds = self._time_at_track(track, event.globalPosition().toPoint())
                 self.marker_place_requested.emit(track.path, seconds)
             event.accept()
             return
 
-        # Приоритет 2: drag playhead
+        # Приоритет 2: клик на метке → drag метки
+        marker = self._marker_at(event.globalPosition().toPoint())
+        if marker is not None:
+            path, time_sec = marker
+            self._dragging_marker = (path, time_sec)
+            self.setCursor(Qt.SizeHorCursor)
+            self.marker_drag_started.emit(path, time_sec)
+            event.accept()
+            return
+
+        # Приоритет 3: drag дорожки по X (только короткой, не на playhead)
+        if not self._is_near_playhead(event.position().x()):
+            target = self._track_for_x_drag_at(event.globalPosition().toPoint())
+            if target is not None:
+                track, _ = target
+                start_offset = self._track_offsets.get(track.path, 0.0)
+                self._dragging_track = (
+                    track.path, start_offset,
+                    event.globalPosition().toPoint().x()
+                )
+                self.setCursor(Qt.ClosedHandCursor)
+                event.accept()
+                return
+
+        # Приоритет 4: drag playhead
         if self._is_near_playhead(event.position().x()):
             self._dragging_playhead = True
             self.setCursor(Qt.SizeHorCursor)
             self.playhead_drag_started.emit()
 
     def mouseReleaseEvent(self, event):
+        if self._dragging_track is not None:
+            path, _, _ = self._dragging_track
+            self._dragging_track = None
+            self.setCursor(Qt.ArrowCursor)
+            final_offset = self._track_offsets.get(path, 0.0)
+            self.track_drag_finished.emit(path, final_offset)
+            return
+
+        if self._dragging_marker is not None:
+            path, final_time = self._dragging_marker
+            self._dragging_marker = None
+            self.setCursor(Qt.ArrowCursor)
+            self.marker_drag_finished.emit(path, final_time)
+            return
+
         if self._dragging_playhead:
             self._dragging_playhead = False
             self.setCursor(Qt.ArrowCursor)
@@ -583,7 +837,9 @@ class TimelineWidget(QWidget):
         event.accept()
 
     def leaveEvent(self, event):
-        if not self._dragging_playhead:
+        if (not self._dragging_playhead
+                and self._dragging_marker is None
+                and self._dragging_track is None):
             if self._tool_cursor is not None:
                 self.setCursor(self._tool_cursor)
             else:
