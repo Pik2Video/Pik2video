@@ -41,6 +41,7 @@ class EditorCoordinator(QObject):
         self._skip_cut_in_progress = False
         self._pending_jump_to_start = False
         self._cut_stopped_at = None
+        self._was_playing_before_marker_drag = False
 
         # Подписки на плеер
         self.player.position_changed.connect(self.on_player_position_changed)
@@ -170,7 +171,77 @@ class EditorCoordinator(QObject):
         self.state.set_offset_x(active_offset, save=False)
         self.state.set_aspect_zoom(active_zoom, save=False)
 
+    # ── Метки таймлайна ──
+
+    def place_marker(self, path: str, time_sec: float, kind: str) -> bool:
+        """Поставить метку kind ("[" / "]" / "][") на дорожке path.
+
+        Возвращает True при успехе. Если path не активный — активируем его.
+        """
+        if not kind or kind not in ("[", "]", "]["):
+            logger.warning(f"[MARKER] неверный kind: {kind!r}")
+            return False
+
+        active_path = self.state.get_video_path()
+        if path != active_path:
+            try:
+                idx = self.state.get_video_files().index(path)
+                self.state.set_active_video(idx)
+            except ValueError:
+                logger.warning(f"[MARKER] path {path} не в списке видео")
+                return False
+
+        ok = self.state.add_timeline_marker(time_sec, kind)
+        logger.info(
+            f"[MARKER] place: {kind} @ {time_sec:.2f}с "
+            f"({'ok' if ok else 'fail'})"
+        )
+        return ok
+
+    def delete_marker(self, path: str, time_sec: float) -> bool:
+        """Удалить метку на time_sec. Работает только для активного файла."""
+        if path != self.state.get_video_path():
+            logger.warning(f"[MARKER] удаление не с активного файла: {path}")
+            return False
+        ok = self.state.remove_timeline_marker(time_sec)
+        if ok:
+            logger.info(f"[MARKER] deleted @ {time_sec:.2f}с")
+        return ok
+
+    def marker_drag_started(self, path: str, time_sec: float):
+        """Начали тащить метку: пауза + seek на неё."""
+        self._was_playing_before_marker_drag = self.player.is_playing()
+        if self._was_playing_before_marker_drag:
+            self.player.pause()
+
+        self.player.suppress_cut_skip = True
+        try:
+            self.player.seek(time_sec)
+        finally:
+            self.player.suppress_cut_skip = False
+        logger.debug(f"[MARKER] drag_started @ {time_sec:.2f}с")
+
+    def marker_dragged(self, path: str, old_time: float, new_time: float):
+        """Тащим метку: двигаем в state + seek плеера."""
+        ok = self.state.move_timeline_marker(old_time, new_time, save=False)
+        if not ok:
+            return
+        self.player.suppress_cut_skip = True
+        try:
+            self.player.seek(new_time)
+        finally:
+            self.player.suppress_cut_skip = False
+
+    def marker_drag_finished(self, path: str, final_time: float):
+        """Отпустили метку: сохраняем JSON + resume если играло."""
+        self.state._save_files()
+        if self._was_playing_before_marker_drag:
+            self.player.play()
+        self._was_playing_before_marker_drag = False
+        logger.debug(f"[MARKER] drag_finished @ {final_time:.2f}с")
+
     # ── Резолверы для play / ⏮ / loop ──
+
 
     def _first_visible_start(self, default: float) -> float:
         visible = self.state.get_visible_intervals()

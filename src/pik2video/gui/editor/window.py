@@ -114,10 +114,12 @@ class EditorWindow(QMainWindow):
         self.multiplexer.set_pre_play_resolver(self._coordinator.resolve_pre_play)
         self.multiplexer.set_start_resolver(self._coordinator.resolve_start)
 
+        # Подписки на сигналы координатора
+        self._setup_coordinator_subscriptions()
+
         # ── Контроллеры (после _build_ui — им нужен top_bar) ──
         self._export_saved_path = None                              # путь к файлу, который был в плеере до экспорта
         self._marker_mode_active = False                             # режим сдвига рамки (перо/маркер)
-        self._was_playing_before_marker_drag = False                 # для drag метки
         self._active_kind = "video"                                  # какой файл активен: "video" | "audio"
         self._marker_menu = None                                     # всплывающее меню инструментов метки
         self._active_tool = None                                     # текущий инструмент: None / "]" / "[" / "]["
@@ -190,6 +192,14 @@ class EditorWindow(QMainWindow):
 
         self.resize(width, height)
 
+
+    def _setup_coordinator_subscriptions(self):
+        """Подписки на сигналы EditorCoordinator (вызывается после его создания)."""
+        self.timeline.marker_place_requested.connect(self._on_marker_place_ui)
+        self.timeline.marker_delete_requested.connect(self._coordinator.delete_marker)
+        self.timeline.marker_drag_started.connect(self._coordinator.marker_drag_started)
+        self.timeline.marker_dragged.connect(self._coordinator.marker_dragged)
+        self.timeline.marker_drag_finished.connect(self._coordinator.marker_drag_finished)
 
     def _build_ui(self):
         central = QWidget()
@@ -319,11 +329,7 @@ class EditorWindow(QMainWindow):
 #         self.timeline.seek_requested.connect(self.multiplexer.set_position)        # клик по полосе → разовый seek # ОТКЛЮЧЕНО (старый таймлайн)
         self.timeline.height_changed.connect(self._on_timeline_height_changed)
         self.timeline.marker_clicked.connect(self._on_marker_clicked)
-        self.timeline.marker_place_requested.connect(self._on_marker_place)
-        self.timeline.marker_delete_requested.connect(self._on_marker_delete_requested)
-        self.timeline.marker_drag_started.connect(self._on_marker_drag_started)
-        self.timeline.marker_dragged.connect(self._on_marker_dragged)
-        self.timeline.marker_drag_finished.connect(self._on_marker_drag_finished)
+        # marker_* подписки — в _setup_coordinator_subscriptions (после создания _coordinator)
         self.timeline.track_drag_finished.connect(self._on_track_drag_finished)
         self.timeline.playhead_drag_started.connect(self._on_scrub_started)
         self.timeline.playhead_dragged.connect(self._on_scrub_dragged)
@@ -694,6 +700,14 @@ class EditorWindow(QMainWindow):
         """Таймлайн сообщил идеальную высоту (после зума дорожки)."""
         self.timeline.setFixedHeight(max(80, height))
 
+    def _on_marker_place_ui(self, path: str, time_sec: float):
+        """UI-обёртка: проверка выбранного инструмента, вызов координатора, сброс."""
+        if not self._active_tool:
+            return
+        self._coordinator.place_marker(path, time_sec, self._active_tool)
+        self._active_tool = None
+        self.timeline.set_tool_cursor(None)
+
     def _on_marker_clicked(self, path: str, global_pos):
         """Клик на карандаш — открыть меню инструментов метки."""
         if self._marker_menu is not None:
@@ -720,85 +734,6 @@ class EditorWindow(QMainWindow):
         self._active_tool = None
         self.timeline.set_tool_cursor(None)
         logger.debug("Инструмент метки сброшен")
-
-    def _on_marker_place(self, path: str, time_sec: float):
-        """Клик по дорожке при активном инструменте — поставить метку и сбросить."""
-        logger.info(
-            f"[MARKER] place: path={Path(path).name if path else '?'} "
-            f"time={time_sec:.2f} tool={self._active_tool}"
-        )
-        if not self._active_tool:
-            logger.warning("[MARKER] нет активного инструмента — пропуск")
-            return
-
-        # Метка ставится только на активную дорожку. Если кликнули на другую — переключаем.
-        active_path = self.state.get_video_path()
-        if path != active_path:
-            try:
-                idx = self.state.get_video_files().index(path)
-                self._on_video_selected(idx)
-                active_path = path
-            except ValueError:
-                logger.warning(
-                    f"[MARKER] путь {path} не в списке видео — пропуск"
-                )
-                return
-
-        ok = self.state.add_timeline_marker(time_sec, self._active_tool)
-        logger.info(f"[MARKER] add_timeline_marker → {ok}")
-
-        # Сброс инструмента после установки
-        self._active_tool = None
-        self.timeline.set_tool_cursor(None)
-
-    def _on_marker_delete_requested(self, path: str, time_sec: float):
-        """Правый клик на метке — удалить её из состояния."""
-        if path != self.state.get_video_path():
-            logger.warning(f"Попытка удалить метку с неактивного файла: {path}")
-            return
-
-        ok = self.state.remove_timeline_marker(time_sec)
-        if ok:
-            logger.info(f"Метка на {time_sec:.2f}с удалена")
-        else:
-            logger.warning(f"Метка на {time_sec:.2f}с не найдена (возможно, уже удалена)")
-
-    def _on_marker_drag_started(self, path: str, time_sec: float):
-        """Начали тащить метку: пауза + позиционируем плеер на метку."""
-        logger.info(f"[MARKER-DRAG-START] {Path(path).name} @ {time_sec:.2f}с")
-        self._was_playing_before_marker_drag = self.multiplexer.engine.is_playing()
-        if self._was_playing_before_marker_drag:
-            self.multiplexer.engine.pause()
-
-        # Позиционируем плеер на метку (пользователь видит кадр, с которого тащит)
-        self.multiplexer.engine.suppress_cut_skip = True
-        try:
-            self.multiplexer.set_position(time_sec)
-        finally:
-            self.multiplexer.engine.suppress_cut_skip = False
-
-    def _on_marker_dragged(self, path: str, old_time: float, new_time: float):
-        """Тащим метку: двигаем в state + прокручиваем плеер."""
-        ok = self.state.move_timeline_marker(old_time, new_time, save=False)
-        if not ok:
-            return
-
-        # Плеер за меткой
-        self.multiplexer.engine.suppress_cut_skip = True
-        try:
-            self.multiplexer.set_position(new_time)
-        finally:
-            self.multiplexer.engine.suppress_cut_skip = False
-
-    def _on_marker_drag_finished(self, path: str, final_time: float):
-        """Отпустили метку: сохраняем в JSON + возобновляем play при необходимости."""
-        logger.debug(f"[MARKER-DRAG] finish: {final_time:.2f}с")
-        # Метка уже на final_time (двигали во время drag) — просто сохраняем JSON
-        self.state._save_files()
-
-        if self._was_playing_before_marker_drag:
-            self.multiplexer.engine.play()
-        self._was_playing_before_marker_drag = False
 
     def _on_track_drag_finished(self, path: str, offset_sec: float):
         """Закончили drag дорожки по X.
@@ -1014,34 +949,6 @@ class EditorWindow(QMainWindow):
 
         return True
     
-    def _on_marker_drag_started(self):
-        """Начало drag метки: пауза плеера + кэш кадров для превью."""
-        self._was_playing_before_drag = self.multiplexer.begin_trim_drag()
-        self.multiplexer.set_keep_frames(True)
-
-    def _on_marker_drag_finished(self):
-        """Окончание drag: снять превью, вернуть воспроизведение."""
-        self._frame_preview.hide_preview()
-        self.multiplexer.set_keep_frames(False)
-        self.multiplexer.end_trim_drag(self._was_playing_before_drag)
-        self._was_playing_before_drag = False
-
-    def _on_marker_double_clicked(self, time_sec: float):
-        """Двойной клик на ромбике → всплывающее меню с удалением метки."""
-        menu = QMenu(self)
-        delete_action = menu.addAction("Удалить метку")
-        delete_action.triggered.connect(lambda: self._delete_marker(time_sec))
-        menu.exec(QCursor.pos())
-
-    def _delete_marker(self, time_sec: float):
-        """Удалить метку, применить состояние предыдущей, обновить таймлайн."""
-        logger.debug(f"Удаляем метку {time_sec:.2f}с")
-        new_offset, new_zoom = self.state.remove_marker(time_sec)
-        self.state.set_offset_x(new_offset)
-        self.state.set_aspect_zoom(new_zoom)
-        self._refresh_timeline_keyframes()
-
-
     # ── Плавающее меню записи ──
     def _on_crop_mode_opened(self):
         """Режим пресетов открылся — показать оверлей и выставить drawing."""
